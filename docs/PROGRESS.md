@@ -6,9 +6,9 @@
 3. `docs/ТЗ.md` — исходное техническое задание
 4. `CLAUDE.md` в корне
 
-## Текущее состояние: Фаза 4 завершена
+## Текущее состояние: S5.1 завершён, Фаза 5 в работе
 
-19 коммитов в `main`. Последний: `131b673 feat(auth): rate limit /api/pair against brute force`.
+20 коммитов в `main`. Последний: `393f2d7 feat(config): TOML config with defaults→file→env→flags precedence`.
 
 **Сервер полностью функциональный и защищённый**, готов к `make install`-этапу (который ещё не сделан).
 
@@ -61,11 +61,13 @@
 - `d439a00 feat(auth): persist tokens to tokens.json` (S4.2b)
 - `131b673 feat(auth): rate limit /api/pair against brute force` (S4.3)
 
+### Фаза 5 — Упаковка
+- `393f2d7 feat(config): TOML config with defaults→file→env→flags precedence` (S5.1)
+
 ## Что осталось
 
-### Фаза 5 — Упаковка сервера (оставшиеся 4 этапа)
+### Фаза 5 — Упаковка сервера (оставшиеся 3 этапа)
 
-- **S5.1 — Флаги + конфиг-файл**: `internal/config` с TOML (единственная внешняя зависимость — `github.com/BurntSushi/toml`), порядок приоритетов defaults→file→env→flags, все хардкоды из main.go (порт 8443, пути серта, TTL PIN, лимиты rate-limit) в конфиг. Плотность M.
 - **S5.2 — `log/slog` уровень из конфига**: slog уже используется, нужен только конфигурируемый level (debug/info/warn/error) и формат (json/text). Плотность S.
 - **S5.3 — systemd user-unit + install.sh**: `packaging/remotelauncher.service`, `install.sh` копирует бинарь в `~/.local/bin/`, unit в `~/.config/systemd/user/`, enable-now. `make install/uninstall/package`. Плотность M.
 - **S5.4 — README + финальный прогон**: README сервера, version через `-ldflags`, финальные тесты. Плотность S.
