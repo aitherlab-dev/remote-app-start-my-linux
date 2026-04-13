@@ -5,6 +5,12 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import coil3.ImageLoader
+import coil3.SingletonImageLoader
+import coil3.network.ktor3.KtorNetworkFetcherFactory
+import coil3.request.CachePolicy
+import coil3.request.crossfade
+import coil3.svg.SvgDecoder
 import com.remotelauncher.data.EncryptedTokenStore
 import com.remotelauncher.data.SettingsRepository
 import com.remotelauncher.data.TokenStore
@@ -26,6 +32,19 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        SingletonImageLoader.setSafe { ctx ->
+            ImageLoader.Builder(ctx)
+                .components {
+                    add(KtorNetworkFetcherFactory(httpClient))
+                    add(SvgDecoder.Factory())
+                }
+                .crossfade(true)
+                .diskCachePolicy(CachePolicy.ENABLED)
+                .memoryCachePolicy(CachePolicy.ENABLED)
+                .build()
+        }
+
         val repository = SettingsRepository(applicationContext.settingsDataStore)
         val tokenStore: TokenStore = try {
             EncryptedTokenStore(applicationContext)

@@ -100,8 +100,11 @@ fun AppNavHost(
                 key = "apps-$serverUrl",
                 factory = AppsViewModel.Factory(repo),
             )
+            val authToken = tokenStore.getToken(serverUrl).orEmpty()
             AppsScreen(
                 viewModel = vm,
+                serverUrl = serverUrl,
+                authToken = authToken,
                 onUnauthorized = {
                     tokenStore.clearToken(serverUrl)
                     navController.navigate(Routes.pairing(serverUrl)) {

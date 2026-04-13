@@ -1,7 +1,6 @@
 package com.remotelauncher.ui.apps
 
 import android.util.Log
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,11 +36,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
+import coil3.network.NetworkHeaders
+import coil3.network.httpHeaders
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import coil3.size.Size
 import com.remotelauncher.R
 import com.remotelauncher.net.AppInfo
 
@@ -49,6 +56,8 @@ import com.remotelauncher.net.AppInfo
 @Composable
 fun AppsScreen(
     viewModel: AppsViewModel,
+    serverUrl: String,
+    authToken: String,
     onUnauthorized: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
@@ -91,7 +100,11 @@ fun AppsScreen(
         ) {
             when (val s = uiState) {
                 is AppsUiState.Loading -> LoadingContent()
-                is AppsUiState.Loaded -> AppsGrid(s.apps)
+                is AppsUiState.Loaded -> AppsGrid(
+                    apps = s.apps,
+                    serverUrl = serverUrl,
+                    authToken = authToken,
+                )
                 is AppsUiState.Empty -> EmptyContent()
                 is AppsUiState.Error -> ErrorContent(
                     message = s.message,
@@ -153,20 +166,41 @@ private fun ErrorContent(
 }
 
 @Composable
-private fun AppsGrid(apps: List<AppInfo>) {
+private fun AppsGrid(
+    apps: List<AppInfo>,
+    serverUrl: String,
+    authToken: String,
+) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 96.dp),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(8.dp),
     ) {
         items(items = apps, key = { it.id }) { app ->
-            AppCard(app)
+            AppCard(app = app, serverUrl = serverUrl, authToken = authToken)
         }
     }
 }
 
 @Composable
-private fun AppCard(app: AppInfo) {
+private fun AppCard(
+    app: AppInfo,
+    serverUrl: String,
+    authToken: String,
+) {
+    val context = LocalContext.current
+    val placeholder = painterResource(R.drawable.ic_app_placeholder)
+    val request = ImageRequest.Builder(context)
+        .data("$serverUrl/api/apps/${app.id}/icon?size=128")
+        .httpHeaders(
+            NetworkHeaders.Builder()
+                .set("Authorization", "Bearer $authToken")
+                .build()
+        )
+        .size(Size(128, 128))
+        .crossfade(true)
+        .build()
+
     Card(
         modifier = Modifier
             .padding(4.dp)
@@ -180,11 +214,14 @@ private fun AppCard(app: AppInfo) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(
+            AsyncImage(
+                model = request,
+                contentDescription = app.name,
+                placeholder = placeholder,
+                error = placeholder,
                 modifier = Modifier
                     .size(64.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
+                    .clip(RoundedCornerShape(8.dp)),
             )
             Spacer(Modifier.height(8.dp))
             Text(

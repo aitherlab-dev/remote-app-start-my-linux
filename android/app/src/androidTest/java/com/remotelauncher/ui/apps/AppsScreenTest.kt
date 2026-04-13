@@ -2,6 +2,7 @@ package com.remotelauncher.ui.apps
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.remotelauncher.data.AppsRepository
@@ -53,6 +54,8 @@ class AppsScreenTest {
             RemoteLauncherTheme {
                 AppsScreen(
                     viewModel = vm,
+                    serverUrl = "https://example:8443",
+                    authToken = "token",
                     onUnauthorized = {},
                     onDisconnect = {},
                 )
@@ -87,5 +90,17 @@ class AppsScreenTest {
         setContent(ApiResult.HttpError(500))
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithText("Повторить").assertIsDisplayed()
+    }
+
+    @Test
+    fun loadedState_iconsHaveContentDescription() {
+        val apps = listOf(
+            AppInfo(id = "a", name = "Firefox"),
+            AppInfo(id = "b", name = "Obsidian"),
+        )
+        setContent(ApiResult.Success(apps))
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithContentDescription("Firefox").assertExists()
+        composeTestRule.onNodeWithContentDescription("Obsidian").assertExists()
     }
 }
