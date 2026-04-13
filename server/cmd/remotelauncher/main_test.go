@@ -8,3 +8,9 @@ func TestMain_Compiles(t *testing.T) {
 		t.Fatalf("smoke test failed: expected 2+2==4")
 	}
 }
+
+func TestVersion_DefaultIsDev(t *testing.T) {
+	if Version != "dev" {
+		t.Errorf("expected default Version=dev, got %q", Version)
+	}
+}
