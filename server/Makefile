@@ -1,4 +1,4 @@
-.PHONY: help build test run clean fmt vet lint cover cover-html
+.PHONY: help build test run clean fmt vet lint cover cover-html scan-debug
 
 GOBIN ?= $(shell go env GOPATH)/bin
 
@@ -13,6 +13,7 @@ help:
 	@echo "  lint        - run golangci-lint on all packages"
 	@echo "  cover       - run tests with coverage and print summary"
 	@echo "  cover-html  - generate HTML coverage report"
+	@echo "  scan-debug  - scan real system .desktop files and print summary"
 
 build:
 	go build -o bin/remotelauncher ./cmd/remotelauncher
@@ -42,3 +43,6 @@ cover:
 
 cover-html: cover
 	go tool cover -html=coverage.out -o coverage.html
+
+scan-debug:
+	go test -tags=manual -run TestScan_RealSystem ./internal/desktop/... -v

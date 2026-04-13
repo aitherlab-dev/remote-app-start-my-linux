@@ -18,6 +18,10 @@ var (
 )
 
 type Entry struct {
+	// ID is populated by the directory scanner, not by Parse.
+	// It is derived from the file path relative to the scan root
+	// (see scanner.go) and stays empty for entries produced by Parse directly.
+	ID             string
 	Name           string
 	GenericName    string
 	Comment        string

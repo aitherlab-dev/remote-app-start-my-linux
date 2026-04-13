@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Valid Two
+Comment=System valid two
+Exec=/bin/valid2 --flag
+Icon=valid2

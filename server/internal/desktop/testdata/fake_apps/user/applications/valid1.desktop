@@ -1,0 +1,4 @@
+[Desktop Entry]
+Type=Application
+Name=user-version
+Exec=/bin/valid1-user
