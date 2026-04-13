@@ -9,10 +9,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.remotelauncher.data.AppsRepository
 import com.remotelauncher.data.SettingsRepository
 import com.remotelauncher.data.TokenStore
 import com.remotelauncher.net.RemoteLauncherApi
 import com.remotelauncher.ui.apps.AppsScreen
+import com.remotelauncher.ui.apps.AppsViewModel
 import com.remotelauncher.ui.connect.ConnectScreen
 import com.remotelauncher.ui.connect.ConnectViewModel
 import com.remotelauncher.ui.pairing.PairingScreen
@@ -21,10 +23,13 @@ import com.remotelauncher.ui.pairing.PairingViewModel
 object Routes {
     const val CONNECT = "connect"
     const val PAIRING = "pairing/{serverUrl}"
-    const val APPS = "apps"
+    const val APPS = "apps/{serverUrl}"
 
     fun pairing(serverUrl: String): String =
         "pairing/" + Uri.encode(serverUrl)
+
+    fun apps(serverUrl: String): String =
+        "apps/" + Uri.encode(serverUrl)
 }
 
 @Composable
@@ -47,7 +52,7 @@ fun AppNavHost(
                 viewModel = vm,
                 onConnected = { url ->
                     val target = if (tokenStore.hasToken(url)) {
-                        Routes.APPS
+                        Routes.apps(url)
                     } else {
                         Routes.pairing(url)
                     }
@@ -74,14 +79,42 @@ fun AppNavHost(
             PairingScreen(
                 viewModel = vm,
                 onPaired = {
-                    navController.navigate(Routes.APPS) {
+                    navController.navigate(Routes.apps(serverUrl)) {
                         popUpTo(Routes.CONNECT) { inclusive = true }
                     }
                 },
             )
         }
-        composable(Routes.APPS) {
-            AppsScreen()
+        composable(
+            route = Routes.APPS,
+            arguments = listOf(navArgument("serverUrl") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val encoded = backStackEntry.arguments?.getString("serverUrl").orEmpty()
+            val serverUrl = Uri.decode(encoded)
+            val repo = AppsRepository(
+                apiFactory = apiFactory,
+                tokenStore = tokenStore,
+                serverUrl = serverUrl,
+            )
+            val vm: AppsViewModel = viewModel(
+                key = "apps-$serverUrl",
+                factory = AppsViewModel.Factory(repo),
+            )
+            AppsScreen(
+                viewModel = vm,
+                onUnauthorized = {
+                    tokenStore.clearToken(serverUrl)
+                    navController.navigate(Routes.pairing(serverUrl)) {
+                        popUpTo(Routes.CONNECT) { inclusive = false }
+                    }
+                },
+                onDisconnect = {
+                    tokenStore.clearToken(serverUrl)
+                    navController.navigate(Routes.CONNECT) {
+                        popUpTo(Routes.CONNECT) { inclusive = true }
+                    }
+                },
+            )
         }
     }
 }

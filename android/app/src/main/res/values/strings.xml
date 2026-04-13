@@ -20,5 +20,9 @@
     <string name="pairing_submit">Подтвердить</string>
     <string name="pairing_sending">Подтверждаем…</string>
 
-    <string name="apps_placeholder">Apps screen — coming in A3.1</string>
+    <string name="apps_title">Приложения</string>
+    <string name="apps_refresh">Обновить</string>
+    <string name="apps_disconnect">Отключиться</string>
+    <string name="apps_empty">На сервере нет приложений</string>
+    <string name="apps_retry">Повторить</string>
 </resources>
