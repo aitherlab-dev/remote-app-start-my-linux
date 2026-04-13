@@ -6,9 +6,11 @@ import androidx.lifecycle.viewModelScope
 import com.remotelauncher.data.AppsRepository
 import com.remotelauncher.net.ApiResult
 import com.remotelauncher.net.AppInfo
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 
 sealed class AppsUiState {
@@ -19,12 +21,24 @@ sealed class AppsUiState {
     data object Unauthorized : AppsUiState()
 }
 
+sealed class AppsUiEvent {
+    data class Launching(val appName: String) : AppsUiEvent()
+    data class Launched(val appName: String) : AppsUiEvent()
+    data class LaunchFailed(val appName: String, val reason: String) : AppsUiEvent()
+}
+
 class AppsViewModel(
     private val repo: AppsRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<AppsUiState>(AppsUiState.Loading)
     val state: StateFlow<AppsUiState> = _state.asStateFlow()
+
+    private val _events = Channel<AppsUiEvent>(capacity = Channel.BUFFERED)
+    val events = _events.receiveAsFlow()
+
+    @Volatile
+    private var launchInFlight = false
 
     init {
         refresh()
@@ -48,6 +62,28 @@ class AppsViewModel(
                     "Нет связи: ${r.cause.message ?: r.cause.javaClass.simpleName}"
                 )
             }
+        }
+    }
+
+    fun onTap(app: AppInfo) {
+        if (launchInFlight) return
+        launchInFlight = true
+        viewModelScope.launch {
+            _events.send(AppsUiEvent.Launching(app.name))
+            when (val r = repo.launch(app.id)) {
+                is ApiResult.Success -> _events.send(AppsUiEvent.Launched(app.name))
+                is ApiResult.HttpError -> {
+                    if (r.code == 401) {
+                        _state.value = AppsUiState.Unauthorized
+                    } else {
+                        _events.send(AppsUiEvent.LaunchFailed(app.name, "сервер ${r.code}"))
+                    }
+                }
+                is ApiResult.NetworkError -> _events.send(
+                    AppsUiEvent.LaunchFailed(app.name, r.cause.message ?: r.cause.javaClass.simpleName)
+                )
+            }
+            launchInFlight = false
         }
     }
 

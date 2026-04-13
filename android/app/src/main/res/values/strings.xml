@@ -25,4 +25,7 @@
     <string name="apps_disconnect">Отключиться</string>
     <string name="apps_empty">На сервере нет приложений</string>
     <string name="apps_retry">Повторить</string>
+    <string name="apps_launching">Запускаю %1$s…</string>
+    <string name="apps_launched">%1$s запущено</string>
+    <string name="apps_launch_failed">Не удалось запустить %1$s: %2$s</string>
 </resources>

@@ -1,6 +1,5 @@
 package com.remotelauncher.ui.apps
 
-import android.util.Log
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,12 +26,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -51,6 +53,7 @@ import coil3.request.crossfade
 import coil3.size.Size
 import com.remotelauncher.R
 import com.remotelauncher.net.AppInfo
+import kotlinx.coroutines.flow.collectLatest
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,10 +65,23 @@ fun AppsScreen(
     onDisconnect: () -> Unit,
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     LaunchedEffect(uiState) {
         if (uiState is AppsUiState.Unauthorized) {
             onUnauthorized()
+        }
+    }
+
+    LaunchedEffect(viewModel) {
+        viewModel.events.collectLatest { event ->
+            val message = when (event) {
+                is AppsUiEvent.Launching -> context.getString(R.string.apps_launching, event.appName)
+                is AppsUiEvent.Launched -> context.getString(R.string.apps_launched, event.appName)
+                is AppsUiEvent.LaunchFailed -> context.getString(R.string.apps_launch_failed, event.appName, event.reason)
+            }
+            snackbarHostState.showSnackbar(message)
         }
     }
 
@@ -89,6 +105,7 @@ fun AppsScreen(
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         val isRefreshing = uiState is AppsUiState.Loading
         PullToRefreshBox(
@@ -104,6 +121,7 @@ fun AppsScreen(
                     apps = s.apps,
                     serverUrl = serverUrl,
                     authToken = authToken,
+                    onTap = { viewModel.onTap(it) },
                 )
                 is AppsUiState.Empty -> EmptyContent()
                 is AppsUiState.Error -> ErrorContent(
@@ -170,6 +188,7 @@ private fun AppsGrid(
     apps: List<AppInfo>,
     serverUrl: String,
     authToken: String,
+    onTap: (AppInfo) -> Unit,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Adaptive(minSize = 96.dp),
@@ -177,7 +196,7 @@ private fun AppsGrid(
         contentPadding = PaddingValues(8.dp),
     ) {
         items(items = apps, key = { it.id }) { app ->
-            AppCard(app = app, serverUrl = serverUrl, authToken = authToken)
+            AppCard(app = app, serverUrl = serverUrl, authToken = authToken, onTap = onTap)
         }
     }
 }
@@ -187,6 +206,7 @@ private fun AppCard(
     app: AppInfo,
     serverUrl: String,
     authToken: String,
+    onTap: (AppInfo) -> Unit,
 ) {
     val context = LocalContext.current
     val placeholder = painterResource(R.drawable.ic_app_placeholder)
@@ -205,7 +225,7 @@ private fun AppCard(
         modifier = Modifier
             .padding(4.dp)
             .aspectRatio(1f)
-            .clickable { Log.d("A3.1", "tap on ${app.id}") },
+            .clickable { onTap(app) },
     ) {
         Column(
             modifier = Modifier

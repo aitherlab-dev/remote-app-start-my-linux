@@ -2,6 +2,7 @@ package com.remotelauncher.data
 
 import com.remotelauncher.net.ApiResult
 import com.remotelauncher.net.AppInfo
+import com.remotelauncher.net.LaunchResponse
 import com.remotelauncher.net.RemoteLauncherApi
 
 class AppsRepository(
@@ -13,5 +14,11 @@ class AppsRepository(
         val token = tokenStore.getToken(serverUrl)
             ?: return ApiResult.HttpError(401, "no token")
         return apiFactory(serverUrl).apps(token)
+    }
+
+    suspend fun launch(appId: String): ApiResult<LaunchResponse> {
+        val token = tokenStore.getToken(serverUrl)
+            ?: return ApiResult.HttpError(401, "no token")
+        return apiFactory(serverUrl).launch(appId, token)
     }
 }
