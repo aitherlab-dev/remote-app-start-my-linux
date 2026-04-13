@@ -10,6 +10,11 @@ interface TokenStore {
     fun setToken(serverUrl: String, token: String)
     fun clearToken(serverUrl: String)
     fun hasToken(serverUrl: String): Boolean = getToken(serverUrl) != null
+
+    fun getPin(serverUrl: String): String?
+    fun setPin(serverUrl: String, pinHex: String)
+    fun clearPin(serverUrl: String)
+    fun hasPin(serverUrl: String): Boolean = getPin(serverUrl) != null
 }
 
 class EncryptedTokenStore(context: Context) : TokenStore {
@@ -25,18 +30,32 @@ class EncryptedTokenStore(context: Context) : TokenStore {
     )
 
     override fun getToken(serverUrl: String): String? =
-        prefs.getString(keyFor(serverUrl), null)
+        prefs.getString(tokenKeyFor(serverUrl), null)
 
     override fun setToken(serverUrl: String, token: String) {
-        prefs.edit().putString(keyFor(serverUrl), token).apply()
+        prefs.edit().putString(tokenKeyFor(serverUrl), token).apply()
     }
 
     override fun clearToken(serverUrl: String) {
-        prefs.edit().remove(keyFor(serverUrl)).apply()
+        prefs.edit().remove(tokenKeyFor(serverUrl)).apply()
     }
 
-    private fun keyFor(serverUrl: String): String =
+    override fun getPin(serverUrl: String): String? =
+        prefs.getString(pinKeyFor(serverUrl), null)
+
+    override fun setPin(serverUrl: String, pinHex: String) {
+        prefs.edit().putString(pinKeyFor(serverUrl), pinHex.uppercase()).apply()
+    }
+
+    override fun clearPin(serverUrl: String) {
+        prefs.edit().remove(pinKeyFor(serverUrl)).apply()
+    }
+
+    private fun tokenKeyFor(serverUrl: String): String =
         "token_" + sha256Hex(serverUrl.lowercase())
+
+    private fun pinKeyFor(serverUrl: String): String =
+        "pin_" + sha256Hex(serverUrl.lowercase())
 
     companion object {
         private const val PREFS_NAME = "tokens"

@@ -47,6 +47,7 @@ private class FakeApi(
 
 private class FakeTokenStore(initial: Map<String, String> = emptyMap()) : TokenStore {
     private val map = initial.toMutableMap()
+    private val pins = mutableMapOf<String, String>()
     override fun getToken(serverUrl: String): String? = map[serverUrl]
     override fun setToken(serverUrl: String, token: String) {
         map[serverUrl] = token
@@ -54,6 +55,9 @@ private class FakeTokenStore(initial: Map<String, String> = emptyMap()) : TokenS
     override fun clearToken(serverUrl: String) {
         map.remove(serverUrl)
     }
+    override fun getPin(serverUrl: String): String? = pins[serverUrl]
+    override fun setPin(serverUrl: String, pinHex: String) { pins[serverUrl] = pinHex }
+    override fun clearPin(serverUrl: String) { pins.remove(serverUrl) }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

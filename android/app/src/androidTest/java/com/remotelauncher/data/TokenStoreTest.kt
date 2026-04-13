@@ -73,4 +73,26 @@ class TokenStoreTest {
         store.setToken("https://Host.Example:8443", "token-case")
         assertEquals("token-case", store.getToken("https://host.example:8443"))
     }
+
+    @Test
+    fun pin_writeReadAndClear() {
+        assertNull(store.getPin(urlA))
+        assertFalse(store.hasPin(urlA))
+        store.setPin(urlA, "deadbeef1234")
+        assertEquals("DEADBEEF1234", store.getPin(urlA))
+        assertTrue(store.hasPin(urlA))
+        store.clearPin(urlA)
+        assertNull(store.getPin(urlA))
+    }
+
+    @Test
+    fun pinAndToken_areIndependent() {
+        store.setToken(urlA, "token-a")
+        store.setPin(urlA, "AABBCC")
+        assertEquals("token-a", store.getToken(urlA))
+        assertEquals("AABBCC", store.getPin(urlA))
+        store.clearToken(urlA)
+        assertNull(store.getToken(urlA))
+        assertEquals("AABBCC", store.getPin(urlA))
+    }
 }

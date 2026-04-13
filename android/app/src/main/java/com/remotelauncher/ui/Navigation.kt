@@ -46,7 +46,7 @@ fun AppNavHost(
     ) {
         composable(Routes.CONNECT) {
             val vm: ConnectViewModel = viewModel(
-                factory = ConnectViewModel.Factory(settingsRepository, apiFactory)
+                factory = ConnectViewModel.Factory(settingsRepository, apiFactory, tokenStore)
             )
             ConnectScreen(
                 viewModel = vm,

@@ -52,6 +52,7 @@ private class FakeTokenStore(
     private val throwOnSet: Boolean = false,
 ) : TokenStore {
     private val map = mutableMapOf<String, String>()
+    private val pins = mutableMapOf<String, String>()
     var setCalls: Int = 0
         private set
 
@@ -66,6 +67,10 @@ private class FakeTokenStore(
     override fun clearToken(serverUrl: String) {
         map.remove(serverUrl)
     }
+
+    override fun getPin(serverUrl: String): String? = pins[serverUrl]
+    override fun setPin(serverUrl: String, pinHex: String) { pins[serverUrl] = pinHex }
+    override fun clearPin(serverUrl: String) { pins.remove(serverUrl) }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)

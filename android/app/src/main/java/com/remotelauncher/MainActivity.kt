@@ -71,10 +71,14 @@ class MainActivity : ComponentActivity() {
     }
 
     private class InMemoryTokenStore : TokenStore {
-        private val map = mutableMapOf<String, String>()
-        override fun getToken(serverUrl: String): String? = map[serverUrl]
-        override fun setToken(serverUrl: String, token: String) { map[serverUrl] = token }
-        override fun clearToken(serverUrl: String) { map.remove(serverUrl) }
+        private val tokens = mutableMapOf<String, String>()
+        private val pins = mutableMapOf<String, String>()
+        override fun getToken(serverUrl: String): String? = tokens[serverUrl]
+        override fun setToken(serverUrl: String, token: String) { tokens[serverUrl] = token }
+        override fun clearToken(serverUrl: String) { tokens.remove(serverUrl) }
+        override fun getPin(serverUrl: String): String? = pins[serverUrl]
+        override fun setPin(serverUrl: String, pinHex: String) { pins[serverUrl] = pinHex.uppercase() }
+        override fun clearPin(serverUrl: String) { pins.remove(serverUrl) }
     }
 
     companion object {

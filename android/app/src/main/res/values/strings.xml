@@ -28,4 +28,10 @@
     <string name="apps_launching">Запускаю %1$s…</string>
     <string name="apps_launched">%1$s запущено</string>
     <string name="apps_launch_failed">Не удалось запустить %1$s: %2$s</string>
+
+    <string name="pin_confirm_title">Подтверждение сервера</string>
+    <string name="pin_confirm_message">Это первое подключение. Сверьте отпечаток ключа с тем, что выводит RemoteLauncher на ПК.</string>
+    <string name="pin_fingerprint_label">Отпечаток сертификата:</string>
+    <string name="pin_confirm_trust">Доверять</string>
+    <string name="pin_confirm_cancel">Отмена</string>
 </resources>

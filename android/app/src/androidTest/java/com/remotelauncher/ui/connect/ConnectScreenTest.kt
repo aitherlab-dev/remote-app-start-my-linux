@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.remotelauncher.data.SettingsRepository
+import com.remotelauncher.data.TokenStore
 import com.remotelauncher.net.ApiResult
 import com.remotelauncher.net.AppInfo
 import com.remotelauncher.net.LaunchResponse
@@ -34,6 +35,17 @@ private class FakeApi : RemoteLauncherApi {
         ApiResult.Success(LaunchResponse("ok", 1))
 }
 
+private class FakeTokenStore : TokenStore {
+    private val tokens = mutableMapOf<String, String>()
+    private val pins = mutableMapOf<String, String>()
+    override fun getToken(serverUrl: String): String? = tokens[serverUrl]
+    override fun setToken(serverUrl: String, token: String) { tokens[serverUrl] = token }
+    override fun clearToken(serverUrl: String) { tokens.remove(serverUrl) }
+    override fun getPin(serverUrl: String): String? = pins[serverUrl]
+    override fun setPin(serverUrl: String, pinHex: String) { pins[serverUrl] = pinHex }
+    override fun clearPin(serverUrl: String) { pins.remove(serverUrl) }
+}
+
 @RunWith(AndroidJUnit4::class)
 class ConnectScreenTest {
 
@@ -52,7 +64,7 @@ class ConnectScreenTest {
 
     private fun setContent() {
         composeTestRule.setContent {
-            val vm = ConnectViewModel(repo) { FakeApi() }
+            val vm = ConnectViewModel(repo, { FakeApi() }, FakeTokenStore())
             RemoteLauncherTheme {
                 ConnectScreen(viewModel = vm)
             }
