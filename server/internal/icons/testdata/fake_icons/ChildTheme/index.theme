@@ -1,0 +1,4 @@
+[Icon Theme]
+Name=ChildTheme
+Comment=A child theme that inherits from ParentTheme
+Inherits=ParentTheme

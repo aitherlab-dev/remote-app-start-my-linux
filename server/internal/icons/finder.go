@@ -1,12 +1,11 @@
 // Package icons locates freedesktop icon files on disk.
 //
-// This is a deliberately simplified XDG icon-theme lookup: it walks the
-// configured theme directories recursively and picks the best match by
-// size, but it does not parse index.theme or follow Inherits= chains.
-// Theme inheritance is handled by a separate, optional step (S2.3) of the
-// plan. The finder only resolves absolute paths, theme-relative names and
-// a legacy pixmaps fallback, which is enough for parsing Icon= fields in
-// .desktop files and serving the resulting bytes over HTTP.
+// The finder walks XDG icon base directories looking for a name in the
+// active theme, the theme's Inherits= chain (parsed from index.theme),
+// hicolor as the universal fallback, and finally the legacy pixmaps
+// locations. Within each theme the directory tree is walked recursively
+// and size buckets are inferred from segment names — both the gnome
+// "48x48/apps" layout and the KDE breeze "apps/48" layout are accepted.
 package icons
 
 import (
@@ -17,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // ErrIconNotFound is returned by Finder.Find when no icon matches.
@@ -42,11 +42,19 @@ const (
 // Finder resolves icon names to filesystem paths.
 //
 // BaseDirs lists the XDG icon base directories in priority order (first
-// entry wins). Theme is the primary theme to search; "hicolor" is always
-// consulted as a fallback, and an empty Theme is treated as "hicolor".
+// entry wins). Theme is the primary theme to search; its parents from
+// Inherits= are walked DFS-order after it, hicolor is always appended at
+// the end if it was not already visited, and an empty Theme is treated
+// as "hicolor".
+//
+// The Inherits graph is built lazily from index.theme files on the first
+// Find call and cached for the lifetime of the Finder.
 type Finder struct {
 	BaseDirs []string
 	Theme    string
+
+	themesOnce sync.Once
+	themes     map[string]*ThemeIndex
 }
 
 // New constructs a Finder. Nil or empty baseDirs selects DefaultBaseDirs.
@@ -148,12 +156,7 @@ func (f *Finder) Find(iconName string, preferredSize int) (path, format string, 
 		return lookupExplicit(iconName)
 	}
 
-	themes := []string{f.Theme}
-	if f.Theme != hicolorTheme {
-		themes = append(themes, hicolorTheme)
-	}
-
-	for _, theme := range themes {
+	for _, theme := range f.resolveThemeChain(f.Theme) {
 		cands := f.collectCandidates(theme, iconName)
 		if p, fmtOut, ok := pickCandidate(cands, preferredSize); ok {
 			return p, fmtOut, nil
@@ -251,6 +254,8 @@ func (f *Finder) collectCandidates(theme, iconName string) []iconCandidate {
 //	<N>x<N>          → exact size N (e.g. 48x48)
 //	<N>x<N>@<scale>  → exact size N (the @scale suffix is accepted and
 //	                   ignored — HiDPI themes use "48x48@2")
+//	<N>              → exact size N (KDE breeze "apps/48" layout)
+//	<N>@<scale>      → exact size N (KDE HiDPI notation)
 //	scalable         → scalableSize sentinel
 //	symbolic         → skipped entirely (second return value is false)
 //
@@ -272,23 +277,104 @@ func sizeFromParts(parts []string) (int, bool) {
 	return 0, false
 }
 
+// parseSizeDir extracts a size from a single directory-name segment.
+// Returns 0 for anything that is not a size bucket.
+//
+// Accepted forms: "48", "48x48", "48x48@2", "48@2". Rejected forms
+// include context names ("apps", "mimetypes"), mismatched pairs like
+// "16x32", and any value that does not parse as a positive integer.
 func parseSizeDir(name string) int {
 	if at := strings.IndexByte(name, '@'); at != -1 {
 		name = name[:at]
 	}
-	x := strings.IndexByte(name, 'x')
-	if x <= 0 {
+	if x := strings.IndexByte(name, 'x'); x > 0 {
+		a, err := strconv.Atoi(name[:x])
+		if err != nil || a <= 0 {
+			return 0
+		}
+		b, err := strconv.Atoi(name[x+1:])
+		if err != nil || b != a {
+			return 0
+		}
+		return a
+	}
+	n, err := strconv.Atoi(name)
+	if err != nil || n <= 0 {
 		return 0
 	}
-	a, err := strconv.Atoi(name[:x])
-	if err != nil || a <= 0 {
-		return 0
+	return n
+}
+
+// resolveThemeChain returns the list of theme names to search, starting
+// from initial and walking the Inherits graph depth-first with a visited
+// set to break cycles. "hicolor" is appended at the end if the walk did
+// not already reach it, so it always acts as the final theme-level
+// fallback before pixmaps.
+//
+// The theme index cache is populated lazily on the first call.
+func (f *Finder) resolveThemeChain(initial string) []string {
+	f.loadThemesOnce()
+
+	visited := make(map[string]struct{})
+	var order []string
+
+	var dfs func(name string)
+	dfs = func(name string) {
+		if name == "" {
+			return
+		}
+		if _, seen := visited[name]; seen {
+			return
+		}
+		visited[name] = struct{}{}
+		order = append(order, name)
+		if idx, ok := f.themes[name]; ok {
+			for _, parent := range idx.Inherits {
+				dfs(parent)
+			}
+		}
 	}
-	b, err := strconv.Atoi(name[x+1:])
-	if err != nil || b != a {
-		return 0
+
+	dfs(initial)
+
+	if _, seen := visited[hicolorTheme]; !seen {
+		order = append(order, hicolorTheme)
 	}
-	return a
+
+	return order
+}
+
+// loadThemesOnce populates f.themes by scanning every first-level
+// directory under each base and attempting to parse an index.theme file.
+// Directories without a valid index.theme are silently skipped. Map keys
+// are theme Name values (as declared inside index.theme), so Inherits=
+// references resolve against the themes they refer to.
+//
+// Entries are kept from the highest-priority base: a user theme with the
+// same Name as a system theme wins, matching BaseDirs ordering.
+func (f *Finder) loadThemesOnce() {
+	f.themesOnce.Do(func() {
+		f.themes = make(map[string]*ThemeIndex)
+		for _, base := range f.BaseDirs {
+			entries, err := os.ReadDir(base)
+			if err != nil {
+				continue
+			}
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
+				themeDir := filepath.Join(base, entry.Name())
+				idx, err := LoadThemeIndex(themeDir)
+				if err != nil {
+					continue
+				}
+				if _, ok := f.themes[idx.Name]; !ok {
+					f.themes[idx.Name] = idx
+				}
+			}
+		}
+	})
 }
 
 // pickCandidate chooses the best candidate from a theme walk, applying

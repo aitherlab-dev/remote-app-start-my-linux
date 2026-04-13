@@ -458,6 +458,121 @@ func TestNew_Defaults(t *testing.T) {
 	}
 }
 
+func TestFinder_InheritanceChildToParent(t *testing.T) {
+	f := New([]string{fakeIcons}, "ChildTheme")
+
+	path, format, err := f.Find("parent-only", 48)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if format != FormatPNG {
+		t.Errorf("format = %q, want %q", format, FormatPNG)
+	}
+	want := filepath.Join(fakeIcons, "ParentTheme", "48x48", "apps", "parent-only.png")
+	if path != want {
+		t.Errorf("path = %q, want %q", path, want)
+	}
+}
+
+func TestFinder_InheritancePrefersChild(t *testing.T) {
+	f := New([]string{fakeIcons}, "ChildTheme")
+
+	path, _, err := f.Find("shared", 64)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	want := filepath.Join(fakeIcons, "ChildTheme", "64x64", "apps", "shared.png")
+	if path != want {
+		t.Errorf("path = %q, want %q (child theme must win over parent)", path, want)
+	}
+}
+
+func TestFinder_InheritanceCycleSafe(t *testing.T) {
+	f := New([]string{fakeIcons}, "CycleA")
+
+	path, _, err := f.Find("loop", 32)
+	if err != nil {
+		t.Fatalf("Find loop: %v", err)
+	}
+	want := filepath.Join(fakeIcons, "CycleB", "32x32", "apps", "loop.png")
+	if path != want {
+		t.Errorf("loop path = %q, want %q", path, want)
+	}
+
+	path, _, err = f.Find("circle", 32)
+	if err != nil {
+		t.Fatalf("Find circle: %v", err)
+	}
+	want = filepath.Join(fakeIcons, "CycleA", "32x32", "apps", "circle.png")
+	if path != want {
+		t.Errorf("circle path = %q, want %q", path, want)
+	}
+}
+
+func TestFinder_KdeLayoutSingleNumber(t *testing.T) {
+	f := New([]string{fakeIcons}, "Breeze")
+
+	path, format, err := f.Find("breeze-app", 48)
+	if err != nil {
+		t.Fatalf("Find breeze-app: %v", err)
+	}
+	if format != FormatPNG {
+		t.Errorf("format = %q, want %q", format, FormatPNG)
+	}
+	want := filepath.Join(fakeIcons, "Breeze", "apps", "48", "breeze-app.png")
+	if path != want {
+		t.Errorf("path = %q, want %q", path, want)
+	}
+
+	path, format, err = f.Find("breeze-vec", 32)
+	if err != nil {
+		t.Fatalf("Find breeze-vec: %v", err)
+	}
+	if format != FormatSVG {
+		t.Errorf("format = %q, want %q", format, FormatSVG)
+	}
+	want = filepath.Join(fakeIcons, "Breeze", "apps", "scalable", "breeze-vec.svg")
+	if path != want {
+		t.Errorf("path = %q, want %q", path, want)
+	}
+}
+
+func TestFinder_HicolorAlwaysAppendedIfMissing(t *testing.T) {
+	f := New([]string{fakeIcons}, "IsolatedTheme")
+
+	path, format, err := f.Find("inkscape", 64)
+	if err != nil {
+		t.Fatalf("Find: %v", err)
+	}
+	if format != FormatSVG {
+		t.Errorf("format = %q, want %q", format, FormatSVG)
+	}
+	want := filepath.Join(fakeIcons, "hicolor", "scalable", "apps", "inkscape.svg")
+	if path != want {
+		t.Errorf("path = %q, want %q (hicolor must be appended)", path, want)
+	}
+}
+
+func TestFinder_ResolveThemeChainBasics(t *testing.T) {
+	f := New([]string{fakeIcons}, "ChildTheme")
+
+	chain := f.resolveThemeChain("ChildTheme")
+	want := []string{"ChildTheme", "ParentTheme", "hicolor"}
+	if !equalStrings(chain, want) {
+		t.Errorf("chain = %v, want %v", chain, want)
+	}
+}
+
+func TestFinder_ResolveThemeChainCycle(t *testing.T) {
+	f := New([]string{fakeIcons}, "CycleA")
+
+	chain := f.resolveThemeChain("CycleA")
+	want := []string{"CycleA", "CycleB", "hicolor"}
+	if !equalStrings(chain, want) {
+		t.Errorf("chain = %v, want %v", chain, want)
+	}
+}
+
 func equalStrings(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

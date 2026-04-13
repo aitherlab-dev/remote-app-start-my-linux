@@ -51,7 +51,7 @@ func run() error {
 		slog.Warn("scan error", "path", se.Path, "err", se.Err)
 	}
 
-	finder := icons.New(nil, "")
+	finder := icons.New(nil, os.Getenv("REMOTELAUNCHER_ICON_THEME"))
 
 	handler := httpapi.NewRouter(Version, startedAt, cat, finder)
 
