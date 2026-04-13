@@ -57,12 +57,13 @@ func newRouterFor(t *testing.T, c *catalog.Catalog, finder *icons.Finder, l AppL
 		alive = &fakeAlive{}
 	}
 	return NewRouter(RouterDeps{
-		Version:   "dev",
-		StartedAt: time.Now().Add(-time.Second),
-		Catalog:   c,
-		Finder:    finder,
-		Launcher:  l,
-		Alive:     alive,
+		Version:     "dev",
+		StartedAt:   time.Now().Add(-time.Second),
+		Catalog:     c,
+		Finder:      finder,
+		Launcher:    l,
+		Alive:       alive,
+		Fingerprint: testFingerprint,
 	})
 }
 

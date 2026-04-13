@@ -34,6 +34,9 @@ func TestRouter_StatusEndpoint(t *testing.T) {
 	if got.AppsCount != 1 {
 		t.Errorf("AppsCount = %d, want 1", got.AppsCount)
 	}
+	if got.CertFingerprint != testFingerprint {
+		t.Errorf("CertFingerprint = %q, want %q (RouterDeps.Fingerprint not wired)", got.CertFingerprint, testFingerprint)
+	}
 }
 
 func TestRouter_AppsEndpoint(t *testing.T) {

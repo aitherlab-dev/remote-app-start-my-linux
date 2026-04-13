@@ -13,12 +13,13 @@ import (
 // REST API. Grouping them in a struct keeps the call-site readable as
 // the dependency list grows (each new handler adds one more field).
 type RouterDeps struct {
-	Version   string
-	StartedAt time.Time
-	Catalog   *catalog.Catalog
-	Finder    *icons.Finder
-	Launcher  AppLauncher
-	Alive     AliveChecker
+	Version     string
+	StartedAt   time.Time
+	Catalog     *catalog.Catalog
+	Finder      *icons.Finder
+	Launcher    AppLauncher
+	Alive       AliveChecker
+	Fingerprint string
 }
 
 // NewRouter builds the top-level http.Handler for the REST API.
@@ -29,7 +30,7 @@ type RouterDeps struct {
 // wrapNotFoundJSON middleware.
 func NewRouter(d RouterDeps) http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("GET /api/status", NewStatusHandler(d.Version, d.StartedAt, d.Catalog))
+	mux.Handle("GET /api/status", NewStatusHandler(d.Version, d.StartedAt, d.Catalog, d.Fingerprint))
 	mux.Handle("GET /api/apps", NewAppsHandler(d.Catalog, d.Alive))
 	mux.Handle("GET /api/apps/{id}/icon", NewIconsHandler(d.Catalog, d.Finder))
 	mux.Handle("POST /api/apps/{id}/launch", NewLaunchHandler(d.Catalog, d.Launcher))

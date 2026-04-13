@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/sasha/remotelauncher/internal/httpapi"
 	"github.com/sasha/remotelauncher/internal/icons"
 	"github.com/sasha/remotelauncher/internal/launcher"
+	"github.com/sasha/remotelauncher/internal/tlsutil"
 )
 
 // Version is set via -ldflags "-X main.Version=<tag>" at release build
@@ -21,7 +24,7 @@ import (
 var Version = "dev"
 
 const (
-	listenAddr           = ":8765"
+	listenAddr           = ":8443"
 	readHeaderTimeout    = 5 * time.Second
 	readTimeout          = 30 * time.Second
 	writeTimeout         = 30 * time.Second
@@ -65,13 +68,28 @@ func run() error {
 	// server so it stops as soon as SIGTERM/SIGINT arrives.
 	go tracker.CleanupLoop(ctx, trackerCleanupPeriod)
 
+	certDir, err := configCertDir()
+	if err != nil {
+		return fmt.Errorf("locate cert dir: %w", err)
+	}
+	certPath, keyPath, err := tlsutil.EnsureCert(certDir)
+	if err != nil {
+		return fmt.Errorf("ensure tls cert: %w", err)
+	}
+	fingerprint, err := tlsutil.Fingerprint(certPath)
+	if err != nil {
+		return fmt.Errorf("compute fingerprint: %w", err)
+	}
+	slog.Info("tls certificate ready", "cert", certPath, "fingerprint", fingerprint)
+
 	handler := httpapi.NewRouter(httpapi.RouterDeps{
-		Version:   Version,
-		StartedAt: startedAt,
-		Catalog:   cat,
-		Finder:    finder,
-		Launcher:  laun,
-		Alive:     tracker,
+		Version:     Version,
+		StartedAt:   startedAt,
+		Catalog:     cat,
+		Finder:      finder,
+		Launcher:    laun,
+		Alive:       tracker,
+		Fingerprint: fingerprint,
 	})
 
 	srv := &http.Server{
@@ -85,8 +103,8 @@ func run() error {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		slog.Info("http server starting", "addr", listenAddr)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		slog.Info("https server starting", "addr", listenAddr)
+		if err := srv.ListenAndServeTLS(certPath, keyPath); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}
 		close(serverErr)
@@ -104,6 +122,21 @@ func run() error {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return err
 	}
-	slog.Info("http server stopped")
+	slog.Info("https server stopped")
 	return nil
+}
+
+// configCertDir returns the directory that stores the server's TLS
+// material. $XDG_CONFIG_HOME takes precedence; otherwise we fall back
+// to ~/.config, matching the XDG Base Directory Specification.
+func configCertDir() (string, error) {
+	base := os.Getenv("XDG_CONFIG_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		base = filepath.Join(home, ".config")
+	}
+	return filepath.Join(base, "remotelauncher"), nil
 }

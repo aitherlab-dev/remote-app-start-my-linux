@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"testing"
 	"time"
 )
+
+const testFingerprint = "AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89"
 
 func TestStatusHandler_OK(t *testing.T) {
 	cat := newTestCatalog(t, map[string]string{
@@ -14,7 +17,7 @@ func TestStatusHandler_OK(t *testing.T) {
 	})
 
 	startedAt := time.Now().Add(-3 * time.Second)
-	h := NewStatusHandler("v1.2.3", startedAt, cat)
+	h := NewStatusHandler("v1.2.3", startedAt, cat, testFingerprint)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/status", nil)
 	w := httptest.NewRecorder()
@@ -49,12 +52,19 @@ func TestStatusHandler_OK(t *testing.T) {
 	if got.AppsCount != 1 {
 		t.Errorf("AppsCount = %d, want 1", got.AppsCount)
 	}
+	if got.CertFingerprint != testFingerprint {
+		t.Errorf("CertFingerprint = %q, want %q", got.CertFingerprint, testFingerprint)
+	}
+	re := regexp.MustCompile(`^([0-9A-F]{2}:){31}[0-9A-F]{2}$`)
+	if !re.MatchString(got.CertFingerprint) {
+		t.Errorf("CertFingerprint = %q, not 32 hex pairs joined by ':'", got.CertFingerprint)
+	}
 }
 
 func TestStatusHandler_UptimeMonotonic(t *testing.T) {
 	cat := newTestCatalog(t, nil)
 	startedAt := time.Now().Add(-1 * time.Second)
-	h := NewStatusHandler("dev", startedAt, cat)
+	h := NewStatusHandler("dev", startedAt, cat, testFingerprint)
 
 	decode := func() StatusResponse {
 		t.Helper()

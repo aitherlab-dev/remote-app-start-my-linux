@@ -5,6 +5,7 @@ package main_test
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/json"
 	"io"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"syscall"
 	"testing"
 	"time"
@@ -27,11 +29,23 @@ func bytesContainsAny(b []byte, needles ...string) bool {
 }
 
 const (
-	serverAddr      = "127.0.0.1:8765"
-	serverURL       = "http://" + serverAddr
+	serverAddr      = "127.0.0.1:8443"
+	serverURL       = "https://" + serverAddr
 	startupDeadline = 5 * time.Second
 	shutdownWindow  = 15 * time.Second
 )
+
+// insecureTLSClient returns an http.Client that skips TLS verification,
+// which is the only way to reach the integration server's self-signed
+// certificate from a test. Never use this pattern in production code.
+func insecureTLSClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // test-only trust
+		},
+		Timeout: 5 * time.Second,
+	}
+}
 
 func TestServer_EndToEnd(t *testing.T) {
 	tmp := t.TempDir()
@@ -44,6 +58,13 @@ func TestServer_EndToEnd(t *testing.T) {
 	writeDesktop(t, appsDir, "alpha.desktop", "Alpha", "alpha")
 	writeDesktop(t, appsDir, "beta.desktop", "Beta", "beta")
 
+	// XDG_CONFIG_HOME holds the server's self-signed TLS material so
+	// the test never touches the developer's real ~/.config.
+	xdgConfig := filepath.Join(tmp, "xdgconfig")
+	if err := os.MkdirAll(xdgConfig, 0o700); err != nil {
+		t.Fatalf("mkdir xdgconfig: %v", err)
+	}
+
 	binary := filepath.Join(tmp, "remotelauncher")
 	build := exec.Command("go", "build", "-o", binary, "./cmd/remotelauncher")
 	build.Dir = repoRoot(t)
@@ -54,10 +75,12 @@ func TestServer_EndToEnd(t *testing.T) {
 	}
 
 	// Isolate the child process from the host XDG dirs so the app
-	// count is deterministic (two, from our fixture).
+	// count is deterministic (two, from our fixture). XDG_CONFIG_HOME
+	// redirects the TLS cert into our tmp dir.
 	env := append(os.Environ(),
 		"XDG_DATA_HOME="+xdgHome,
 		"XDG_DATA_DIRS="+xdgHome,
+		"XDG_CONFIG_HOME="+xdgConfig,
 		"HOME="+xdgHome,
 	)
 
@@ -78,12 +101,15 @@ func TestServer_EndToEnd(t *testing.T) {
 		t.Fatalf("wait for port: %v", err)
 	}
 
+	client := insecureTLSClient()
+
 	// GET /api/status
 	{
-		body := httpGetOK(t, serverURL+"/api/status")
+		body := httpGetOK(t, client, serverURL+"/api/status")
 		var status struct {
-			Version   string `json:"version"`
-			AppsCount int    `json:"apps_count"`
+			Version         string `json:"version"`
+			AppsCount       int    `json:"apps_count"`
+			CertFingerprint string `json:"cert_fingerprint"`
 		}
 		if err := json.Unmarshal(body, &status); err != nil {
 			t.Fatalf("decode status: %v (body=%s)", err, body)
@@ -94,6 +120,14 @@ func TestServer_EndToEnd(t *testing.T) {
 		if status.AppsCount < 0 {
 			t.Errorf("status.AppsCount = %d, want >= 0", status.AppsCount)
 		}
+		re := regexp.MustCompile(`^([0-9A-F]{2}:){31}[0-9A-F]{2}$`)
+		if !re.MatchString(status.CertFingerprint) {
+			t.Errorf("cert_fingerprint = %q, not a 32-pair uppercase hex string", status.CertFingerprint)
+		}
+		// The cert should be under xdgConfig/remotelauncher.
+		if _, err := os.Stat(filepath.Join(xdgConfig, "remotelauncher", "cert.pem")); err != nil {
+			t.Errorf("cert.pem missing under XDG_CONFIG_HOME: %v", err)
+		}
 	}
 
 	// GET /api/apps — DefaultPaths hardcodes /usr/share/applications
@@ -102,7 +136,7 @@ func TestServer_EndToEnd(t *testing.T) {
 	// the assertion is: our two fixtures must be present and no
 	// Exec-like field may leak.
 	{
-		body := httpGetOK(t, serverURL+"/api/apps")
+		body := httpGetOK(t, client, serverURL+"/api/apps")
 		if bytesContainsAny(body, "\"exec\"", "\"Exec\"", "\"tryexec\"", "\"TryExec\"") {
 			t.Errorf("/api/apps leaked an exec field: %s", body)
 		}
@@ -128,7 +162,7 @@ func TestServer_EndToEnd(t *testing.T) {
 
 	// GET /api/nonexistent -> 404 JSON
 	{
-		resp, err := http.Get(serverURL + "/api/nonexistent")
+		resp, err := client.Get(serverURL + "/api/nonexistent")
 		if err != nil {
 			t.Fatalf("GET nonexistent: %v", err)
 		}
@@ -194,9 +228,9 @@ func waitForPort(addr string, within time.Duration) error {
 	}
 }
 
-func httpGetOK(t *testing.T, url string) []byte {
+func httpGetOK(t *testing.T, client *http.Client, url string) []byte {
 	t.Helper()
-	resp, err := http.Get(url)
+	resp, err := client.Get(url)
 	if err != nil {
 		t.Fatalf("GET %s: %v", url, err)
 	}
