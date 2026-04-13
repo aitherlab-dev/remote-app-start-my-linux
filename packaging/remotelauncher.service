@@ -1,0 +1,12 @@
+[Unit]
+Description=RemoteLauncher — launch desktop apps from Android
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/remotelauncher
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

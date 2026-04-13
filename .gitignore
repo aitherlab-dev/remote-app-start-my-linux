@@ -10,6 +10,7 @@
 
 # Build output
 /server/bin/
+/server/dist/
 /server/remotelauncher
 /server/coverage.out
 /server/coverage.html
