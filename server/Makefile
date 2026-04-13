@@ -1,4 +1,4 @@
-.PHONY: help build test run clean fmt vet lint cover cover-html scan-debug integration
+.PHONY: help build test run clean fmt vet lint cover cover-html scan-debug icons-debug integration
 
 GOBIN ?= $(shell go env GOPATH)/bin
 
@@ -14,6 +14,7 @@ help:
 	@echo "  cover       - run tests with coverage and print summary"
 	@echo "  cover-html  - generate HTML coverage report"
 	@echo "  scan-debug  - scan real system .desktop files and print summary"
+	@echo "  icons-debug - probe real system icon themes for a few well-known apps"
 	@echo "  integration - run integration tests (build tag 'integration')"
 
 build:
@@ -47,6 +48,9 @@ cover-html: cover
 
 scan-debug:
 	go test -tags=manual -run TestScan_RealSystem ./internal/desktop/... -v
+
+icons-debug:
+	go test -tags=manual -run TestFinder_RealSystem ./internal/icons/... -v
 
 integration:
 	go test -tags=integration -count=1 ./cmd/remotelauncher/...
