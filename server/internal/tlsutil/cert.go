@@ -171,10 +171,13 @@ func collectIPs() []net.IP {
 	return ips
 }
 
-// Fingerprint returns the SHA-256 fingerprint of the certificate at
-// path, formatted as colon-separated hex pairs ("AB:CD:EF:..."). The
-// hash is computed over the DER encoding, not the PEM wrapper, to match
-// the format produced by `openssl x509 -fingerprint -sha256`.
+// Fingerprint returns the SHA-256 SPKI (Subject Public Key Info)
+// fingerprint of the certificate at path, formatted as colon-separated
+// hex pairs ("AB:CD:EF:..."). The hash is computed over the DER-encoded
+// SubjectPublicKeyInfo, matching what Android clients compute via
+// X509Certificate.publicKey.encoded. SPKI pinning (rather than full
+// certificate pinning) lets the server rotate the certificate while
+// reusing the same key without invalidating client pins.
 func Fingerprint(certPath string) (string, error) {
 	data, err := os.ReadFile(certPath)
 	if err != nil {
@@ -184,7 +187,11 @@ func Fingerprint(certPath string) (string, error) {
 	if block == nil || block.Type != "CERTIFICATE" {
 		return "", fmt.Errorf("%s: no CERTIFICATE PEM block", certPath)
 	}
-	sum := sha256.Sum256(block.Bytes)
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return "", fmt.Errorf("%s: parse certificate: %w", certPath, err)
+	}
+	sum := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
 	encoded := hex.EncodeToString(sum[:])
 	pairs := make([]string, 0, len(sum))
 	for i := 0; i < len(encoded); i += 2 {
