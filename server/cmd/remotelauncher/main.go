@@ -12,6 +12,7 @@ import (
 
 	"github.com/sasha/remotelauncher/internal/catalog"
 	"github.com/sasha/remotelauncher/internal/httpapi"
+	"github.com/sasha/remotelauncher/internal/icons"
 )
 
 // Version is set via -ldflags "-X main.Version=<tag>" at release build
@@ -50,7 +51,9 @@ func run() error {
 		slog.Warn("scan error", "path", se.Path, "err", se.Err)
 	}
 
-	handler := httpapi.NewRouter(Version, startedAt, cat)
+	finder := icons.New(nil, "")
+
+	handler := httpapi.NewRouter(Version, startedAt, cat, finder)
 
 	srv := &http.Server{
 		Addr:              listenAddr,

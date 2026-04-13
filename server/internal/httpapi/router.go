@@ -2,9 +2,11 @@ package httpapi
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sasha/remotelauncher/internal/catalog"
+	"github.com/sasha/remotelauncher/internal/icons"
 )
 
 // NewRouter builds the top-level http.Handler for the REST API.
@@ -13,10 +15,11 @@ import (
 // mismatched methods on a registered path are returned as 405 with an
 // Allow header, unknown paths fall through to a JSON 404 via the
 // wrapNotFoundJSON middleware.
-func NewRouter(version string, startedAt time.Time, c *catalog.Catalog) http.Handler {
+func NewRouter(version string, startedAt time.Time, c *catalog.Catalog, f *icons.Finder) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/status", NewStatusHandler(version, startedAt, c))
 	mux.Handle("GET /api/apps", NewAppsHandler(c))
+	mux.Handle("GET /api/apps/{id}/icon", NewIconsHandler(c, f))
 	return wrapNotFoundJSON(mux)
 }
 
@@ -46,6 +49,15 @@ type notFoundInterceptor struct {
 
 func (n *notFoundInterceptor) WriteHeader(code int) {
 	if code == http.StatusNotFound {
+		// A downstream handler that already committed a JSON
+		// Content-Type is producing an intentional 404 (e.g. /icon
+		// reporting "app not found"). Let it through untouched.
+		// ServeMux's own NotFoundHandler uses text/plain, which is
+		// how we distinguish the two.
+		if ct := n.ResponseWriter.Header().Get("Content-Type"); strings.HasPrefix(ct, "application/json") {
+			n.ResponseWriter.WriteHeader(code)
+			return
+		}
 		n.intercepted = true
 		h := n.ResponseWriter.Header()
 		for k := range h {

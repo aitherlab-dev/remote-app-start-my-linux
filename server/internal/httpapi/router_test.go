@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/sasha/remotelauncher/internal/icons"
 )
 
 func newTestRouter(t *testing.T) http.Handler {
@@ -13,7 +15,8 @@ func newTestRouter(t *testing.T) http.Handler {
 	cat := newTestCatalog(t, map[string]string{
 		"one.desktop": desktopEntry("One", "one", "", "", ""),
 	})
-	return NewRouter("dev", time.Now().Add(-2*time.Second), cat)
+	finder := icons.New([]string{t.TempDir()}, "hicolor")
+	return NewRouter("dev", time.Now().Add(-2*time.Second), cat, finder)
 }
 
 func TestRouter_StatusEndpoint(t *testing.T) {
