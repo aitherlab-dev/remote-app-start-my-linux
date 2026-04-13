@@ -26,7 +26,7 @@ help:
 	@echo "  package     - produce dist/remotelauncher-<version>-linux-amd64.tar.gz"
 
 build:
-	go build -o bin/remotelauncher ./cmd/remotelauncher
+	go build -ldflags "-X main.Version=$(VERSION)" -o bin/remotelauncher ./cmd/remotelauncher
 
 test:
 	go test ./...
