@@ -276,6 +276,52 @@ func TestTracker_CleanupLoop(t *testing.T) {
 	}
 }
 
+func TestTracker_ForgetExistingPID(t *testing.T) {
+	tr := NewTracker()
+	tr.Register("a", 100)
+	tr.Register("a", 200)
+	tr.Register("a", 300)
+
+	tr.Forget("a", 200)
+
+	got := append([]int(nil), tr.pids["a"]...)
+	sort.Ints(got)
+	if len(got) != 2 || got[0] != 100 || got[1] != 300 {
+		t.Errorf("after Forget(a, 200) pids[a] = %v, want [100 300]", got)
+	}
+}
+
+func TestTracker_ForgetLastPIDRemovesKey(t *testing.T) {
+	tr := NewTracker()
+	tr.Register("a", 100)
+
+	tr.Forget("a", 100)
+
+	if pids, ok := tr.pids["a"]; ok {
+		t.Errorf("pids still contains key %q with %v after last Forget", "a", pids)
+	}
+}
+
+func TestTracker_ForgetUnknownIDNoop(t *testing.T) {
+	tr := NewTracker()
+	tr.Forget("nonexistent", 100)
+	if _, ok := tr.pids["nonexistent"]; ok {
+		t.Errorf("pids contains unknown id after Forget")
+	}
+}
+
+func TestTracker_ForgetUnknownPIDNoop(t *testing.T) {
+	tr := NewTracker()
+	tr.Register("a", 100)
+
+	tr.Forget("a", 999)
+
+	got := tr.pids["a"]
+	if len(got) != 1 || got[0] != 100 {
+		t.Errorf("after Forget(a, 999) pids[a] = %v, want [100]", got)
+	}
+}
+
 func TestTracker_IsAliveGuards(t *testing.T) {
 	if isAlive(0) {
 		t.Errorf("isAlive(0) = true, want false")

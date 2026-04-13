@@ -240,17 +240,50 @@ func TestLauncher_RegistersPID(t *testing.T) {
 		t.Errorf("Pids(%q) = %v, want [%d]", entry.ID, gotPids, pid)
 	}
 
-	// The launched child is still our direct child (Setsid creates a new
-	// session but not a new parent), so after sleep exits we must reap
-	// it here or kill(pid,0) keeps returning nil on the zombie.
-	time.Sleep(1500 * time.Millisecond)
-	var ws syscall.WaitStatus
-	if _, err := syscall.Wait4(pid, &ws, 0, nil); err != nil {
-		t.Fatalf("Wait4(%d): %v", pid, err)
+	// The reaper goroutine inside Launch calls cmd.Wait and Forget
+	// on the tracker when the child exits. 2s is generous headroom
+	// over the 1s sleep for reliably observing the flip.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if !l.Tracker().Alive(entry.ID) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
-
-	l.Tracker().Cleanup()
 	if l.Tracker().Alive(entry.ID) {
 		t.Errorf("Alive(%q) = true after process exit, want false", entry.ID)
+	}
+}
+
+func TestLauncher_ReapsZombies(t *testing.T) {
+	entry := desktop.Entry{
+		ID:   "test-reap",
+		Exec: "/bin/true",
+	}
+	tracker := NewTracker()
+	l := New(tracker)
+	pid, err := l.Launch(entry)
+	killAfter(t, pid)
+	if err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	if pid <= 0 {
+		t.Fatalf("pid = %d, want >0", pid)
+	}
+
+	// /bin/true exits immediately; give the reaper goroutine a chance
+	// to observe the exit and call Forget.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if !tracker.Alive(entry.ID) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if tracker.Alive(entry.ID) {
+		t.Errorf("Alive(%q) = true, want false after reap", entry.ID)
+	}
+	if pids := tracker.Pids(entry.ID); len(pids) != 0 {
+		t.Errorf("Pids(%q) = %v, want empty after reap", entry.ID, pids)
 	}
 }

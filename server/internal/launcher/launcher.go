@@ -3,8 +3,10 @@
 //
 // Launch resolves argv via desktop.SplitExec + desktop.Expand, optionally
 // wraps the command in a terminal emulator for Terminal=true entries, and
-// starts it with SysProcAttr.Setsid=true. Child stdio is nullified and
-// no Wait is performed — this is fire-and-forget.
+// starts it with SysProcAttr.Setsid=true. Child stdio is nullified. After
+// Start, a reaper goroutine calls cmd.Wait so the child is not left as a
+// zombie while the server is running, and then drops the pid from the
+// Tracker via Forget so Alive flips to false promptly on exit.
 package launcher
 
 import (
@@ -55,8 +57,9 @@ func (l *Launcher) Tracker() *Tracker { return l.tracker }
 
 // Launch starts the application described by entry and returns the PID
 // of the started process. The child is detached via Setsid, so it keeps
-// running after the server exits. Stdin/stdout/stderr are nil and the
-// caller does not wait on the child.
+// running after the server exits. Stdin/stdout/stderr are nil. Launch
+// returns immediately; a background goroutine reaps the child via
+// cmd.Wait and removes its pid from the Tracker on exit.
 func (l *Launcher) Launch(entry desktop.Entry) (int, error) {
 	if entry.Exec == "" {
 		return 0, ErrEmptyExec
@@ -94,6 +97,17 @@ func (l *Launcher) Launch(entry desktop.Entry) (int, error) {
 	}
 	pid := cmd.Process.Pid
 	l.tracker.Register(entry.ID, pid)
+
+	// Reap the child in a goroutine so it does not become a zombie
+	// while the server is still running. Setsid detaches the process
+	// from our session but not from us as parent — init only takes
+	// over after we exit. Forget removes the pid from the tracker so
+	// Alive flips to false as soon as the child dies.
+	go func(cmd *exec.Cmd, id string, pid int) {
+		_ = cmd.Wait()
+		l.tracker.Forget(id, pid)
+	}(cmd, entry.ID, pid)
+
 	return pid, nil
 }
 

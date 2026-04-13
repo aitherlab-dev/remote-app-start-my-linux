@@ -34,6 +34,29 @@ func (t *Tracker) Register(id string, pid int) {
 	t.pids[id] = append(t.pids[id], pid)
 }
 
+// Forget removes a single pid from id's list. If the list becomes
+// empty the key is deleted from the map. Calling Forget with an
+// unknown id or a pid that is not tracked is a no-op.
+func (t *Tracker) Forget(id string, pid int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	src, ok := t.pids[id]
+	if !ok {
+		return
+	}
+	for i, p := range src {
+		if p == pid {
+			src = append(src[:i], src[i+1:]...)
+			break
+		}
+	}
+	if len(src) == 0 {
+		delete(t.pids, id)
+		return
+	}
+	t.pids[id] = src
+}
+
 // Alive reports whether at least one registered PID for id is alive.
 // It prunes dead PIDs for that id before answering; if none remain,
 // the key is removed from the map.
