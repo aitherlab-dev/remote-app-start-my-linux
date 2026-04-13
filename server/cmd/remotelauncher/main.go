@@ -14,6 +14,7 @@ import (
 
 	"github.com/sasha/remotelauncher/internal/auth"
 	"github.com/sasha/remotelauncher/internal/catalog"
+	"github.com/sasha/remotelauncher/internal/config"
 	"github.com/sasha/remotelauncher/internal/httpapi"
 	"github.com/sasha/remotelauncher/internal/icons"
 	"github.com/sasha/remotelauncher/internal/launcher"
@@ -23,20 +24,6 @@ import (
 // Version is set via -ldflags "-X main.Version=<tag>" at release build
 // time and defaults to "dev" for local builds.
 var Version = "dev"
-
-const (
-	listenAddr           = ":8443"
-	readHeaderTimeout    = 5 * time.Second
-	readTimeout          = 30 * time.Second
-	writeTimeout         = 30 * time.Second
-	idleTimeout          = 120 * time.Second
-	shutdownGraceLimit   = 10 * time.Second
-	trackerCleanupPeriod = 5 * time.Second
-	pinTTL               = 10 * time.Minute
-	pairRateWindow       = 10 * time.Minute
-	pairRatePerIP        = 5
-	pairRateGlobal       = 20
-)
 
 // storeTokenIssuer is the main-package adapter that bridges the
 // httpapi.TokenIssuer interface to the auth package: mint a fresh
@@ -57,29 +44,37 @@ func (i storeTokenIssuer) Issue(label string) (string, error) {
 }
 
 func main() {
-	if err := run(); err != nil {
+	if err := run(os.Args[1:]); err != nil {
 		slog.Error("server failed", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
+func run(args []string) error {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
+
+	cfg, err := config.Load(args)
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+	if cfg.Paths.ConfigFile != "" {
+		slog.Info("config loaded", "path", cfg.Paths.ConfigFile)
+	}
 
 	startedAt := time.Now()
 
 	cat := catalog.New(nil)
-	loaded, scanErrors, err := cat.Load()
-	if err != nil {
-		return err
+	loaded, scanErrors, loadErr := cat.Load()
+	if loadErr != nil {
+		return loadErr
 	}
 	slog.Info("catalog loaded", "count", loaded, "scan_errors", len(scanErrors))
 	for _, se := range scanErrors {
 		slog.Warn("scan error", "path", se.Path, "err", se.Err)
 	}
 
-	finder := icons.New(nil, os.Getenv("REMOTELAUNCHER_ICON_THEME"))
+	finder := icons.New(nil, cfg.IconTheme)
 
 	tracker := launcher.NewTracker()
 	laun := launcher.New(tracker)
@@ -89,9 +84,9 @@ func run() error {
 
 	// CleanupLoop is bound to the same signal context as the HTTP
 	// server so it stops as soon as SIGTERM/SIGINT arrives.
-	go tracker.CleanupLoop(ctx, trackerCleanupPeriod)
+	go tracker.CleanupLoop(ctx, cfg.Launcher.CleanupPeriod)
 
-	certDir, err := configCertDir()
+	certDir, err := resolveCertDir(cfg.Paths.CertDir)
 	if err != nil {
 		return fmt.Errorf("locate cert dir: %w", err)
 	}
@@ -105,7 +100,7 @@ func run() error {
 	}
 	slog.Info("tls certificate ready", "cert", certPath, "fingerprint", fingerprint)
 
-	pinSession, err := auth.NewPINSession(pinTTL)
+	pinSession, err := auth.NewPINSession(cfg.Auth.PINTTL)
 	if err != nil {
 		return fmt.Errorf("create pin session: %w", err)
 	}
@@ -122,11 +117,13 @@ func run() error {
 	// The PIN is printed to stdout on its own so a human operator
 	// running the server in a foreground terminal can read it and type
 	// it into the phone; slog still logs it structurally so journalctl
-	// captures the same value. Printing twice is deliberate.
-	fmt.Fprintf(os.Stdout, "\nPairing PIN: %s (valid for %s)\n\n", pinSession.Current(), pinTTL)
-	slog.Info("pairing pin generated", "pin", pinSession.Current(), "valid_for", pinTTL)
+	// captures the same value. Printing twice is deliberate. The exact
+	// format ("Pairing PIN: NNNNNN") is parsed by the integration test
+	// and must not change without updating cmd/remotelauncher/integration_test.go.
+	fmt.Fprintf(os.Stdout, "\nPairing PIN: %s (valid for %s)\n\n", pinSession.Current(), cfg.Auth.PINTTL)
+	slog.Info("pairing pin generated", "pin", pinSession.Current(), "valid_for", cfg.Auth.PINTTL)
 
-	pairLimiter := auth.NewRateLimiter(pairRatePerIP, pairRateGlobal, pairRateWindow)
+	pairLimiter := auth.NewRateLimiter(cfg.Auth.RateLimitPerIP, cfg.Auth.RateLimitGlobal, cfg.Auth.RateLimitWindow)
 
 	handler := httpapi.NewRouter(httpapi.RouterDeps{
 		Version:     Version,
@@ -143,17 +140,17 @@ func run() error {
 	})
 
 	srv := &http.Server{
-		Addr:              listenAddr,
+		Addr:              cfg.Server.ListenAddr,
 		Handler:           handler,
-		ReadHeaderTimeout: readHeaderTimeout,
-		ReadTimeout:       readTimeout,
-		WriteTimeout:      writeTimeout,
-		IdleTimeout:       idleTimeout,
+		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
+		ReadTimeout:       cfg.Server.ReadTimeout,
+		WriteTimeout:      cfg.Server.WriteTimeout,
+		IdleTimeout:       cfg.Server.IdleTimeout,
 	}
 
 	serverErr := make(chan error, 1)
 	go func() {
-		slog.Info("https server starting", "addr", listenAddr)
+		slog.Info("https server starting", "addr", cfg.Server.ListenAddr)
 		if err := srv.ListenAndServeTLS(certPath, keyPath); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}
@@ -167,7 +164,7 @@ func run() error {
 		slog.Info("shutdown signal received")
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGraceLimit)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownGrace)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return err
@@ -176,10 +173,14 @@ func run() error {
 	return nil
 }
 
-// configCertDir returns the directory that stores the server's TLS
-// material. $XDG_CONFIG_HOME takes precedence; otherwise we fall back
-// to ~/.config, matching the XDG Base Directory Specification.
-func configCertDir() (string, error) {
+// resolveCertDir returns the directory that holds the server's TLS
+// material. A non-empty override from the config layer wins; otherwise
+// we fall back to $XDG_CONFIG_HOME/remotelauncher (or ~/.config/...),
+// matching the XDG Base Directory Specification.
+func resolveCertDir(override string) (string, error) {
+	if override != "" {
+		return override, nil
+	}
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {
 		home, err := os.UserHomeDir()

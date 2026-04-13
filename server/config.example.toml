@@ -1,0 +1,47 @@
+# RemoteLauncher server configuration
+#
+# All keys are optional. Any key that is omitted keeps its compiled-in
+# default, so a blank file behaves exactly like running the server with
+# no config file at all. The resolved order of precedence is:
+#
+#     built-in defaults   ←  this file   ←  REMOTELAUNCHER_* env vars   ←  --flags
+#
+# Durations use Go's time.ParseDuration syntax: "5s", "500ms", "2m30s",
+# "1h", etc.
+#
+# Default install path (honoured when --config is not passed):
+#   $XDG_CONFIG_HOME/remotelauncher/config.toml
+#
+# A missing file is NOT an error.
+
+# icon_theme = ""             # XDG icon theme to prefer when serving icons;
+                              # empty means "no explicit theme" (previously
+                              # REMOTELAUNCHER_ICON_THEME).
+
+[server]
+# listen_addr         = ":8443"     # host:port the HTTPS server binds to
+# read_header_timeout = "5s"        # http.Server.ReadHeaderTimeout
+# read_timeout        = "30s"       # http.Server.ReadTimeout
+# write_timeout       = "30s"       # http.Server.WriteTimeout
+# idle_timeout        = "2m"        # http.Server.IdleTimeout
+# shutdown_grace      = "10s"       # window for graceful shutdown on SIGTERM
+
+[launcher]
+# cleanup_period = "5s"             # how often the launcher reaps dead PIDs
+
+[auth]
+# pin_ttl           = "10m"         # lifetime of the pairing PIN printed at startup
+# rate_limit_per_ip = 5             # max /api/pair attempts per IP per window
+# rate_limit_global = 20            # max /api/pair attempts across all clients per window
+# rate_limit_window = "10m"         # rolling window the two counters above apply to
+
+[paths]
+# cert_dir = ""                     # override for TLS cert/key directory;
+                                    # blank means $XDG_CONFIG_HOME/remotelauncher
+
+[logging]
+# Logging.* is wired for S5.2 — currently the server still runs with a
+# text slog handler at INFO regardless of these values. Filling them in
+# ahead of time lets you freeze your intended config.
+# level  = "info"                   # debug | info | warn | error
+# format = "text"                   # text | json
