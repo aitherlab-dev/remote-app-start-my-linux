@@ -107,6 +107,14 @@ func run() error {
 		return fmt.Errorf("create pin session: %w", err)
 	}
 	tokenStore := auth.NewStore()
+	tokensPath := filepath.Join(certDir, "tokens.json")
+	if err := tokenStore.Load(tokensPath); err != nil {
+		return fmt.Errorf("load tokens: %w", err)
+	}
+	slog.Info("tokens loaded", "count", tokenStore.Count(), "path", tokensPath)
+	tokenStore.SetPersistPath(tokensPath, func(err error) {
+		slog.Error("persist tokens", "err", err, "path", tokensPath)
+	})
 
 	// The PIN is printed to stdout on its own so a human operator
 	// running the server in a foreground terminal can read it and type
