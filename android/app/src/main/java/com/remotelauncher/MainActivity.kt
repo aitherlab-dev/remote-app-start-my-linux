@@ -3,31 +3,47 @@ package com.remotelauncher
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
+import com.remotelauncher.data.SettingsRepository
+import com.remotelauncher.data.settingsDataStore
+import com.remotelauncher.net.KtorRemoteLauncherApi
+import com.remotelauncher.net.RemoteLauncherApi
+import com.remotelauncher.ui.AppNavHost
 import com.remotelauncher.ui.theme.RemoteLauncherTheme
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.serialization.json.Json
 
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContent {
-            RemoteLauncherTheme {
-                Greeting()
+
+    private val httpClient: HttpClient by lazy {
+        HttpClient(CIO) {
+            install(ContentNegotiation) {
+                json(Json { ignoreUnknownKeys = true })
             }
         }
     }
-}
 
-@Composable
-fun Greeting() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = "Hello RemoteLauncher")
+    private val apiFactory: (String) -> RemoteLauncherApi = { baseUrl ->
+        KtorRemoteLauncherApi(httpClient, baseUrl)
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        val repository = SettingsRepository(applicationContext.settingsDataStore)
+        setContent {
+            RemoteLauncherTheme {
+                AppNavHost(
+                    settingsRepository = repository,
+                    apiFactory = apiFactory,
+                )
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        httpClient.close()
     }
 }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RemoteLauncher</string>
+
+    <string name="connect_title">Подключение к серверу</string>
+    <string name="connect_address_label">Адрес сервера</string>
+    <string name="connect_address_placeholder">https://example.com:8443</string>
+    <string name="connect_button">Подключиться</string>
+    <string name="connect_connecting">Подключаемся…</string>
+    <string name="connect_success">Подключено к %1$s, приложений: %2$d</string>
+
+    <string name="error_empty_input">Адрес пустой</string>
+    <string name="error_http">Сервер ответил %1$d</string>
+    <string name="error_network">Нет сети: %1$s</string>
+    <string name="error_unknown_network">Нет сети</string>
+</resources>
