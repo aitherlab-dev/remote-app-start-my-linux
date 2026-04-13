@@ -13,4 +13,12 @@
     <string name="error_http">Сервер ответил %1$d</string>
     <string name="error_network">Нет сети: %1$s</string>
     <string name="error_unknown_network">Нет сети</string>
+
+    <string name="pairing_title">Введите PIN с сервера</string>
+    <string name="pairing_hint">PIN показан в терминале, где запущен RemoteLauncher</string>
+    <string name="pairing_pin_label">PIN</string>
+    <string name="pairing_submit">Подтвердить</string>
+    <string name="pairing_sending">Подтверждаем…</string>
+
+    <string name="apps_placeholder">Apps screen — coming in A3.1</string>
 </resources>

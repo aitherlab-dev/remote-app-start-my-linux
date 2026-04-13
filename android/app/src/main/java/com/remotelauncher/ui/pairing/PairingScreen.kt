@@ -1,4 +1,4 @@
-package com.remotelauncher.ui.connect
+package com.remotelauncher.ui.pairing
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,31 +28,21 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.remotelauncher.R
 
 @Composable
-fun ConnectScreen(
-    viewModel: ConnectViewModel,
-    onConnected: (serverUrl: String) -> Unit = {},
+fun PairingScreen(
+    viewModel: PairingViewModel,
+    onPaired: () -> Unit,
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
-    val savedUrl by viewModel.savedUrl.collectAsStateWithLifecycle()
+    var pin by remember { mutableStateOf("") }
 
-    var input by remember { mutableStateOf("") }
-    var prefilled by remember { mutableStateOf(false) }
-
-    LaunchedEffect(savedUrl) {
-        if (!prefilled && savedUrl.isNotEmpty()) {
-            input = savedUrl
-            prefilled = true
-        }
-    }
+    val isSending = uiState is PairingUiState.Sending
+    val canSubmit = !isSending && pin.length == PairingViewModel.PIN_LENGTH && pin.all { it.isDigit() }
 
     LaunchedEffect(uiState) {
-        val s = uiState
-        if (s is ConnectUiState.Connected) {
-            onConnected(s.serverUrl)
+        if (uiState is PairingUiState.Paired) {
+            onPaired()
         }
     }
-
-    val isConnecting = uiState is ConnectUiState.Connecting
 
     Column(
         modifier = Modifier
@@ -62,59 +52,50 @@ fun ConnectScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
-            text = stringResource(R.string.connect_title),
+            text = stringResource(R.string.pairing_title),
             style = MaterialTheme.typography.headlineSmall,
+        )
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.pairing_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(24.dp))
         OutlinedTextField(
-            value = input,
-            onValueChange = {
-                input = it
-                if (uiState !is ConnectUiState.Idle) viewModel.reset()
+            value = pin,
+            onValueChange = { raw ->
+                val filtered = raw.filter { it.isDigit() }.take(PairingViewModel.PIN_LENGTH)
+                pin = filtered
+                if (uiState is PairingUiState.Error) viewModel.reset()
             },
-            label = { Text(stringResource(R.string.connect_address_label)) },
-            placeholder = { Text(stringResource(R.string.connect_address_placeholder)) },
+            label = { Text(stringResource(R.string.pairing_pin_label)) },
             singleLine = true,
-            enabled = !isConnecting,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+            enabled = !isSending,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(16.dp))
         Button(
-            onClick = { viewModel.connect(input) },
-            enabled = !isConnecting,
+            onClick = { viewModel.submit(pin) },
+            enabled = canSubmit,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(stringResource(R.string.connect_button))
+            Text(stringResource(R.string.pairing_submit))
         }
         Spacer(Modifier.height(16.dp))
 
         when (val s = uiState) {
-            is ConnectUiState.Idle -> Unit
-            is ConnectUiState.Connecting -> {
+            is PairingUiState.EnterPin, PairingUiState.Paired -> Unit
+            is PairingUiState.Sending -> {
                 CircularProgressIndicator()
                 Spacer(Modifier.height(8.dp))
-                Text(stringResource(R.string.connect_connecting))
+                Text(stringResource(R.string.pairing_sending))
             }
-            is ConnectUiState.InputError -> {
+            is PairingUiState.Error -> {
                 Text(
                     text = s.message,
                     color = MaterialTheme.colorScheme.error,
-                )
-            }
-            is ConnectUiState.ConnectionFailed -> {
-                Text(
-                    text = s.message,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            is ConnectUiState.Connected -> {
-                Text(
-                    text = stringResource(
-                        R.string.connect_success,
-                        s.status.version,
-                        s.status.appsCount,
-                    ),
                 )
             }
         }

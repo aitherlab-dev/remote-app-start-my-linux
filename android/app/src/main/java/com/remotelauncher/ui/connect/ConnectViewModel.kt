@@ -21,7 +21,7 @@ sealed class ConnectUiState {
     data object Idle : ConnectUiState()
     data class InputError(val message: String) : ConnectUiState()
     data object Connecting : ConnectUiState()
-    data class Connected(val status: ServerStatus) : ConnectUiState()
+    data class Connected(val serverUrl: String, val status: ServerStatus) : ConnectUiState()
     data class ConnectionFailed(val message: String) : ConnectUiState()
 }
 
@@ -53,7 +53,7 @@ class ConnectViewModel(
                     when (val result = api.status()) {
                         is ApiResult.Success -> {
                             repo.setServerUrl(parsed.url)
-                            _state.value = ConnectUiState.Connected(result.value)
+                            _state.value = ConnectUiState.Connected(parsed.url, result.value)
                         }
                         is ApiResult.HttpError -> {
                             _state.value = ConnectUiState.ConnectionFailed(
