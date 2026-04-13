@@ -33,6 +33,9 @@ const (
 	shutdownGraceLimit   = 10 * time.Second
 	trackerCleanupPeriod = 5 * time.Second
 	pinTTL               = 10 * time.Minute
+	pairRateWindow       = 10 * time.Minute
+	pairRatePerIP        = 5
+	pairRateGlobal       = 20
 )
 
 // storeTokenIssuer is the main-package adapter that bridges the
@@ -123,6 +126,8 @@ func run() error {
 	fmt.Fprintf(os.Stdout, "\nPairing PIN: %s (valid for %s)\n\n", pinSession.Current(), pinTTL)
 	slog.Info("pairing pin generated", "pin", pinSession.Current(), "valid_for", pinTTL)
 
+	pairLimiter := auth.NewRateLimiter(pairRatePerIP, pairRateGlobal, pairRateWindow)
+
 	handler := httpapi.NewRouter(httpapi.RouterDeps{
 		Version:     Version,
 		StartedAt:   startedAt,
@@ -134,6 +139,7 @@ func run() error {
 		TokenStore:  tokenStore,
 		PINProvider: pinSession,
 		TokenIssuer: storeTokenIssuer{store: tokenStore},
+		RateLimiter: pairLimiter,
 	})
 
 	srv := &http.Server{

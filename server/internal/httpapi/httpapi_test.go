@@ -133,6 +133,7 @@ func newRouterFor(t *testing.T, c *catalog.Catalog, finder *icons.Finder, l AppL
 		TokenStore:  store,
 		PINProvider: &fakePINProvider{pin: "000000", consumeOK: true},
 		TokenIssuer: &fakeTokenIssuer{token: "unused-token"},
+		RateLimiter: auth.NewRateLimiter(1000, 10_000, 10*time.Minute),
 	})
 }
 

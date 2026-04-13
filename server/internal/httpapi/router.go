@@ -24,6 +24,7 @@ type RouterDeps struct {
 	TokenStore  *auth.Store
 	PINProvider PINProvider
 	TokenIssuer TokenIssuer
+	RateLimiter *auth.RateLimiter
 }
 
 // NewRouter builds the top-level http.Handler for the REST API.
@@ -41,7 +42,13 @@ type RouterDeps struct {
 func NewRouter(d RouterDeps) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/status", NewStatusHandler(d.Version, d.StartedAt, d.Catalog, d.Fingerprint))
-	mux.Handle("POST /api/pair", NewPairHandler(d.PINProvider, d.TokenIssuer))
+	pairHandler := NewPairHandler(d.PINProvider, d.TokenIssuer)
+	if d.RateLimiter != nil {
+		rateLimitMw := NewRateLimitMiddleware(d.RateLimiter)
+		mux.Handle("POST /api/pair", rateLimitMw(pairHandler))
+	} else {
+		mux.Handle("POST /api/pair", pairHandler)
+	}
 	mux.Handle("GET /api/apps", auth.RequireToken(d.TokenStore, NewAppsHandler(d.Catalog, d.Alive)))
 	mux.Handle("GET /api/apps/{id}/icon", auth.RequireToken(d.TokenStore, NewIconsHandler(d.Catalog, d.Finder)))
 	mux.Handle("POST /api/apps/{id}/launch", auth.RequireToken(d.TokenStore, NewLaunchHandler(d.Catalog, d.Launcher)))
