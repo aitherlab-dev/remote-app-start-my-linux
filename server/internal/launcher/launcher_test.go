@@ -38,7 +38,7 @@ func waitForFile(t *testing.T, path string, timeout time.Duration) bool {
 }
 
 func TestLauncher_EmptyExec(t *testing.T) {
-	l := New()
+	l := New(nil)
 	pid, err := l.Launch(desktop.Entry{Exec: ""})
 	if pid != 0 {
 		t.Errorf("pid = %d, want 0", pid)
@@ -50,7 +50,7 @@ func TestLauncher_EmptyExec(t *testing.T) {
 
 func TestLauncher_OnlyFieldCodes(t *testing.T) {
 	// Exec has only field codes that expand to nothing when files=nil.
-	l := New()
+	l := New(nil)
 	pid, err := l.Launch(desktop.Entry{Exec: "%F"})
 	if pid != 0 {
 		t.Errorf("pid = %d, want 0", pid)
@@ -61,7 +61,7 @@ func TestLauncher_OnlyFieldCodes(t *testing.T) {
 }
 
 func TestLauncher_SplitExecError(t *testing.T) {
-	l := New()
+	l := New(nil)
 	pid, err := l.Launch(desktop.Entry{Exec: `foo "unterminated`})
 	if pid != 0 {
 		t.Errorf("pid = %d, want 0", pid)
@@ -72,7 +72,7 @@ func TestLauncher_SplitExecError(t *testing.T) {
 }
 
 func TestLauncher_BadCommand(t *testing.T) {
-	l := New()
+	l := New(nil)
 	pid, err := l.Launch(desktop.Entry{Exec: "/nonexistent/path/foo"})
 	if pid != 0 {
 		t.Errorf("pid = %d, want 0", pid)
@@ -92,7 +92,7 @@ func TestLauncher_StartSucceeds(t *testing.T) {
 		ID:   "test-start",
 		Exec: `/bin/sh -c "echo $$ > ` + pidFile + `"`,
 	}
-	l := New()
+	l := New(nil)
 	pid, err := l.Launch(entry)
 	killAfter(t, pid)
 	if err != nil {
@@ -124,7 +124,7 @@ func TestLauncher_RunsDetached(t *testing.T) {
 		ID:   "test-detached",
 		Exec: `/bin/sh -c "sleep 1 && touch ` + doneFile + `"`,
 	}
-	l := New()
+	l := New(nil)
 	pid, err := l.Launch(entry)
 	killAfter(t, pid)
 	if err != nil {
@@ -156,7 +156,7 @@ func TestLauncher_RespectsPath(t *testing.T) {
 		Exec: `/bin/sh -c "pwd > out"`,
 		Path: realTmp,
 	}
-	l := New()
+	l := New(nil)
 	pid, err := l.Launch(entry)
 	killAfter(t, pid)
 	if err != nil {
@@ -185,7 +185,7 @@ func TestLauncher_TerminalTrue_HasEmulator(t *testing.T) {
 		Exec:     "true",
 		Terminal: true,
 	}
-	l := New()
+	l := New(nil)
 	pid, err := l.Launch(entry)
 	killAfter(t, pid)
 	if err != nil {
@@ -203,7 +203,7 @@ func TestLauncher_TerminalTrue_Fallback(t *testing.T) {
 		Exec:     "true",
 		Terminal: true,
 	}
-	l := New()
+	l := New(nil)
 	pid, err := l.Launch(entry)
 	if pid != 0 {
 		t.Errorf("pid = %d, want 0", pid)
@@ -216,4 +216,41 @@ func TestLauncher_TerminalTrue_Fallback(t *testing.T) {
 func anyTerminalAvailable() bool {
 	_, err := findTerminal()
 	return err == nil
+}
+
+func TestLauncher_RegistersPID(t *testing.T) {
+	entry := desktop.Entry{
+		ID:   "test-register",
+		Exec: `/bin/sh -c "sleep 1"`,
+	}
+	l := New(NewTracker())
+	pid, err := l.Launch(entry)
+	killAfter(t, pid)
+	if err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	if pid <= 0 {
+		t.Fatalf("pid = %d, want >0", pid)
+	}
+	if !l.Tracker().Alive(entry.ID) {
+		t.Errorf("Alive(%q) = false immediately after Launch, want true", entry.ID)
+	}
+	gotPids := l.Tracker().Pids(entry.ID)
+	if len(gotPids) != 1 || gotPids[0] != pid {
+		t.Errorf("Pids(%q) = %v, want [%d]", entry.ID, gotPids, pid)
+	}
+
+	// The launched child is still our direct child (Setsid creates a new
+	// session but not a new parent), so after sleep exits we must reap
+	// it here or kill(pid,0) keeps returning nil on the zombie.
+	time.Sleep(1500 * time.Millisecond)
+	var ws syscall.WaitStatus
+	if _, err := syscall.Wait4(pid, &ws, 0, nil); err != nil {
+		t.Fatalf("Wait4(%d): %v", pid, err)
+	}
+
+	l.Tracker().Cleanup()
+	if l.Tracker().Alive(entry.ID) {
+		t.Errorf("Alive(%q) = true after process exit, want false", entry.ID)
+	}
 }

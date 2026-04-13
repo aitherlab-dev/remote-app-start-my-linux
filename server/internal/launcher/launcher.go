@@ -35,11 +35,23 @@ var terminalCandidates = []string{
 }
 
 // Launcher starts applications detached from the current process.
-// It is safe to use a zero value or one returned by New.
-type Launcher struct{}
+// It always registers successfully started PIDs with its Tracker so
+// callers can later ask whether an app is running.
+type Launcher struct {
+	tracker *Tracker
+}
 
-// New returns a ready Launcher.
-func New() *Launcher { return &Launcher{} }
+// New returns a Launcher bound to tracker. If tracker is nil a fresh
+// empty Tracker is created internally.
+func New(tracker *Tracker) *Launcher {
+	if tracker == nil {
+		tracker = NewTracker()
+	}
+	return &Launcher{tracker: tracker}
+}
+
+// Tracker returns the Tracker this Launcher registers PIDs with.
+func (l *Launcher) Tracker() *Tracker { return l.tracker }
 
 // Launch starts the application described by entry and returns the PID
 // of the started process. The child is detached via Setsid, so it keeps
@@ -80,7 +92,9 @@ func (l *Launcher) Launch(entry desktop.Entry) (int, error) {
 	if err := cmd.Start(); err != nil {
 		return 0, fmt.Errorf("start %q: %w", entry.ID, err)
 	}
-	return cmd.Process.Pid, nil
+	pid := cmd.Process.Pid
+	l.tracker.Register(entry.ID, pid)
+	return pid, nil
 }
 
 // findTerminal returns the absolute path of the first terminal emulator
