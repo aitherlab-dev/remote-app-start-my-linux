@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sasha/remotelauncher/internal/auth"
 	"github.com/sasha/remotelauncher/internal/catalog"
 	"github.com/sasha/remotelauncher/internal/httpapi"
 	"github.com/sasha/remotelauncher/internal/icons"
@@ -31,7 +32,26 @@ const (
 	idleTimeout          = 120 * time.Second
 	shutdownGraceLimit   = 10 * time.Second
 	trackerCleanupPeriod = 5 * time.Second
+	pinTTL               = 10 * time.Minute
 )
+
+// storeTokenIssuer is the main-package adapter that bridges the
+// httpapi.TokenIssuer interface to the auth package: mint a fresh
+// token, record its hash in the Store, hand the plaintext back to the
+// pair handler. Keeping the adapter in main avoids any import cycle
+// between httpapi and auth.
+type storeTokenIssuer struct {
+	store *auth.Store
+}
+
+func (i storeTokenIssuer) Issue(label string) (string, error) {
+	plaintext, info, err := auth.IssueToken(label)
+	if err != nil {
+		return "", err
+	}
+	i.store.Add(info)
+	return plaintext, nil
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -82,6 +102,19 @@ func run() error {
 	}
 	slog.Info("tls certificate ready", "cert", certPath, "fingerprint", fingerprint)
 
+	pinSession, err := auth.NewPINSession(pinTTL)
+	if err != nil {
+		return fmt.Errorf("create pin session: %w", err)
+	}
+	tokenStore := auth.NewStore()
+
+	// The PIN is printed to stdout on its own so a human operator
+	// running the server in a foreground terminal can read it and type
+	// it into the phone; slog still logs it structurally so journalctl
+	// captures the same value. Printing twice is deliberate.
+	fmt.Fprintf(os.Stdout, "\nPairing PIN: %s (valid for %s)\n\n", pinSession.Current(), pinTTL)
+	slog.Info("pairing pin generated", "pin", pinSession.Current(), "valid_for", pinTTL)
+
 	handler := httpapi.NewRouter(httpapi.RouterDeps{
 		Version:     Version,
 		StartedAt:   startedAt,
@@ -90,6 +123,9 @@ func run() error {
 		Launcher:    laun,
 		Alive:       tracker,
 		Fingerprint: fingerprint,
+		TokenStore:  tokenStore,
+		PINProvider: pinSession,
+		TokenIssuer: storeTokenIssuer{store: tokenStore},
 	})
 
 	srv := &http.Server{

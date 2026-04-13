@@ -2,16 +2,70 @@ package httpapi
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/sasha/remotelauncher/internal/auth"
 	"github.com/sasha/remotelauncher/internal/catalog"
 	"github.com/sasha/remotelauncher/internal/desktop"
 	"github.com/sasha/remotelauncher/internal/icons"
 )
+
+// testBearerToken is the plaintext token seeded into every test router
+// by newRouterFor. Tests that exercise protected endpoints can build
+// requests with authedRequest, which attaches the matching Bearer
+// header. The string is opaque; the test suite only cares that its
+// SHA-256 hash matches the entry newRouterFor inserts into the store.
+const testBearerToken = "test-bearer-token"
+
+// authedRequest is the test-only equivalent of httptest.NewRequest
+// that attaches the standard Bearer header matching testBearerToken.
+// Every post-S4.2a test against a protected endpoint should build its
+// request through this helper so the auth middleware lets it through.
+func authedRequest(method, target string, body io.Reader) *http.Request {
+	req := httptest.NewRequest(method, target, body)
+	req.Header.Set("Authorization", "Bearer "+testBearerToken)
+	return req
+}
+
+// fakePINProvider is the PINProvider test double for pair_test.go. It
+// returns a fixed PIN and keeps a configurable Consume outcome so
+// tests can simulate both the fresh and the already-used session.
+type fakePINProvider struct {
+	pin       string
+	consumeOK bool
+	consumed  int
+}
+
+func (f *fakePINProvider) Current() string {
+	return f.pin
+}
+
+func (f *fakePINProvider) Consume() bool {
+	f.consumed++
+	return f.consumeOK
+}
+
+// fakeTokenIssuer is the TokenIssuer test double for pair_test.go. It
+// records the last label it was asked to mint a token for, and either
+// returns the canned plaintext or the canned error.
+type fakeTokenIssuer struct {
+	token string
+	err   error
+	label string
+	calls int
+}
+
+func (f *fakeTokenIssuer) Issue(label string) (string, error) {
+	f.calls++
+	f.label = label
+	return f.token, f.err
+}
 
 // fakeLauncher is the AppLauncher test double used across launch /
 // router tests. It records the entry it was called with and returns
@@ -45,6 +99,10 @@ func (f *fakeAlive) Alive(id string) bool {
 // newRouterFor builds a router with sensible test defaults. Pass nil
 // for collaborators that should be left out of the test (the router
 // will still wire them up, but the handler endpoint won't be hit).
+//
+// The returned router is seeded with a token store that already knows
+// testBearerToken, so tests can hit protected endpoints through
+// authedRequest without having to run the /api/pair flow.
 func newRouterFor(t *testing.T, c *catalog.Catalog, finder *icons.Finder, l AppLauncher, alive AliveChecker) http.Handler {
 	t.Helper()
 	if finder == nil {
@@ -56,6 +114,14 @@ func newRouterFor(t *testing.T, c *catalog.Catalog, finder *icons.Finder, l AppL
 	if alive == nil {
 		alive = &fakeAlive{}
 	}
+	store := auth.NewStore()
+	now := time.Now().UTC()
+	store.Add(auth.TokenInfo{
+		Hash:        auth.HashToken(testBearerToken),
+		DeviceLabel: "test",
+		CreatedAt:   now,
+		LastSeen:    now,
+	})
 	return NewRouter(RouterDeps{
 		Version:     "dev",
 		StartedAt:   time.Now().Add(-time.Second),
@@ -64,6 +130,9 @@ func newRouterFor(t *testing.T, c *catalog.Catalog, finder *icons.Finder, l AppL
 		Launcher:    l,
 		Alive:       alive,
 		Fingerprint: testFingerprint,
+		TokenStore:  store,
+		PINProvider: &fakePINProvider{pin: "000000", consumeOK: true},
+		TokenIssuer: &fakeTokenIssuer{token: "unused-token"},
 	})
 }
 

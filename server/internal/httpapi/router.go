@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sasha/remotelauncher/internal/auth"
 	"github.com/sasha/remotelauncher/internal/catalog"
 	"github.com/sasha/remotelauncher/internal/icons"
 )
@@ -20,6 +21,9 @@ type RouterDeps struct {
 	Launcher    AppLauncher
 	Alive       AliveChecker
 	Fingerprint string
+	TokenStore  *auth.Store
+	PINProvider PINProvider
+	TokenIssuer TokenIssuer
 }
 
 // NewRouter builds the top-level http.Handler for the REST API.
@@ -28,12 +32,19 @@ type RouterDeps struct {
 // mismatched methods on a registered path are returned as 405 with an
 // Allow header, unknown paths fall through to a JSON 404 via the
 // wrapNotFoundJSON middleware.
+//
+// Auth model: /api/status and /api/pair are unauthenticated — the
+// former so clients can probe the server and fingerprint the cert, the
+// latter because pairing itself is the authentication. Every other
+// endpoint is wrapped in auth.RequireToken and demands a valid Bearer
+// token minted by a successful /api/pair.
 func NewRouter(d RouterDeps) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /api/status", NewStatusHandler(d.Version, d.StartedAt, d.Catalog, d.Fingerprint))
-	mux.Handle("GET /api/apps", NewAppsHandler(d.Catalog, d.Alive))
-	mux.Handle("GET /api/apps/{id}/icon", NewIconsHandler(d.Catalog, d.Finder))
-	mux.Handle("POST /api/apps/{id}/launch", NewLaunchHandler(d.Catalog, d.Launcher))
+	mux.Handle("POST /api/pair", NewPairHandler(d.PINProvider, d.TokenIssuer))
+	mux.Handle("GET /api/apps", auth.RequireToken(d.TokenStore, NewAppsHandler(d.Catalog, d.Alive)))
+	mux.Handle("GET /api/apps/{id}/icon", auth.RequireToken(d.TokenStore, NewIconsHandler(d.Catalog, d.Finder)))
+	mux.Handle("POST /api/apps/{id}/launch", auth.RequireToken(d.TokenStore, NewLaunchHandler(d.Catalog, d.Launcher)))
 	return wrapNotFoundJSON(mux)
 }
 

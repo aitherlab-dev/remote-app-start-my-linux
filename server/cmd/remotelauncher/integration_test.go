@@ -14,6 +14,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -86,7 +88,12 @@ func TestServer_EndToEnd(t *testing.T) {
 
 	cmd := exec.Command(binary)
 	cmd.Env = env
-	cmd.Stdout = os.Stdout
+	// Capture stdout into a buffer so the test can parse the PIN the
+	// server prints on startup, while still forwarding lines to the
+	// real os.Stdout for debuggability. stderr (slog output) goes to
+	// the test stderr verbatim.
+	stdoutBuf := &syncBuffer{}
+	cmd.Stdout = io.MultiWriter(os.Stdout, stdoutBuf)
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start server: %v", err)
@@ -102,6 +109,64 @@ func TestServer_EndToEnd(t *testing.T) {
 	}
 
 	client := insecureTLSClient()
+
+	// Parse the pairing PIN the server printed to stdout, then run
+	// the /api/pair flow to obtain a Bearer token. Every subsequent
+	// authenticated request uses this token.
+	pin, err := waitForPIN(stdoutBuf, 3*time.Second)
+	if err != nil {
+		t.Fatalf("parse pin: %v", err)
+	}
+
+	var token string
+	{
+		pairBody := `{"pin":"` + pin + `","device_label":"integration-test"}`
+		resp, err := client.Post(serverURL+"/api/pair", "application/json", strings.NewReader(pairBody))
+		if err != nil {
+			t.Fatalf("POST /api/pair: %v", err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("POST /api/pair status=%d, body=%s", resp.StatusCode, body)
+		}
+		var pair struct {
+			Token string `json:"token"`
+		}
+		if err := json.Unmarshal(body, &pair); err != nil {
+			t.Fatalf("decode pair: %v (body=%s)", err, body)
+		}
+		if pair.Token == "" {
+			t.Fatalf("pair token empty")
+		}
+		token = pair.Token
+	}
+
+	// A second /api/pair attempt with the same PIN must now fail —
+	// the one-shot session was already consumed.
+	{
+		pairBody := `{"pin":"` + pin + `","device_label":"replay"}`
+		resp, err := client.Post(serverURL+"/api/pair", "application/json", strings.NewReader(pairBody))
+		if err != nil {
+			t.Fatalf("POST /api/pair (replay): %v", err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("replay pair status=%d, want 401", resp.StatusCode)
+		}
+	}
+
+	// /api/apps without Authorization → 401.
+	{
+		resp, err := client.Get(serverURL + "/api/apps")
+		if err != nil {
+			t.Fatalf("GET /api/apps (no auth): %v", err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("unauthorized GET /api/apps status=%d, want 401", resp.StatusCode)
+		}
+	}
 
 	// GET /api/status
 	{
@@ -136,7 +201,7 @@ func TestServer_EndToEnd(t *testing.T) {
 	// the assertion is: our two fixtures must be present and no
 	// Exec-like field may leak.
 	{
-		body := httpGetOK(t, client, serverURL+"/api/apps")
+		body := authedGetOK(t, client, serverURL+"/api/apps", token)
 		if bytesContainsAny(body, "\"exec\"", "\"Exec\"", "\"tryexec\"", "\"TryExec\"") {
 			t.Errorf("/api/apps leaked an exec field: %s", body)
 		}
@@ -243,6 +308,75 @@ func httpGetOK(t *testing.T, client *http.Client, url string) []byte {
 		t.Fatalf("GET %s status = %d, body=%s", url, resp.StatusCode, body)
 	}
 	return body
+}
+
+// authedGetOK is httpGetOK with a Bearer token attached. Every
+// post-S4.2a endpoint under /api/apps requires it.
+func authedGetOK(t *testing.T, client *http.Client, url, token string) []byte {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("new request %s: %v", url, err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body %s: %v", url, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET %s status = %d, body=%s", url, resp.StatusCode, body)
+	}
+	return body
+}
+
+// pinRegexp matches the "Pairing PIN: NNNNNN" line the server prints
+// on startup. The six-digit capture group isolates the PIN itself.
+var pinRegexp = regexp.MustCompile(`Pairing PIN: (\d{6})`)
+
+// waitForPIN polls the captured stdout buffer until either the PIN
+// banner appears or the deadline elapses.
+func waitForPIN(buf *syncBuffer, within time.Duration) (string, error) {
+	deadline := time.Now().Add(within)
+	for {
+		if m := pinRegexp.FindStringSubmatch(buf.String()); m != nil {
+			return m[1], nil
+		}
+		if time.Now().After(deadline) {
+			return "", &pinNotFoundError{got: buf.String()}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+type pinNotFoundError struct{ got string }
+
+func (e *pinNotFoundError) Error() string {
+	return "pin not found in stdout; captured=" + e.got
+}
+
+// syncBuffer is a concurrency-safe io.Writer backed by bytes.Buffer.
+// The child process writes to it from a background goroutine while
+// the test polls it for the PIN.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.buf.String()
 }
 
 // repoRoot returns the server/ directory (the module root) so the

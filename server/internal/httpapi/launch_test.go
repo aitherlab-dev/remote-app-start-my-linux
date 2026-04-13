@@ -18,7 +18,7 @@ func TestLaunchHandler_OK(t *testing.T) {
 	fl := &fakeLauncher{pid: 12345}
 	r := newRouterFor(t, cat, nil, fl, nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/apps/firefox/launch", nil)
+	req := authedRequest(http.MethodPost, "/api/apps/firefox/launch", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -44,7 +44,7 @@ func TestLaunchHandler_AppNotFound(t *testing.T) {
 	cat := newTestCatalog(t, nil)
 	r := newRouterFor(t, cat, nil, nil, nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/apps/nonexistent/launch", nil)
+	req := authedRequest(http.MethodPost, "/api/apps/nonexistent/launch", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -73,7 +73,7 @@ func TestLaunchHandler_AppHasNoExec(t *testing.T) {
 	fl := &fakeLauncher{}
 	r := newRouterFor(t, cat, nil, fl, nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/apps/noexec/launch", nil)
+	req := authedRequest(http.MethodPost, "/api/apps/noexec/launch", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -102,7 +102,7 @@ func TestLaunchHandler_LauncherEmptyExec(t *testing.T) {
 	fl := &fakeLauncher{err: launcher.ErrEmptyExec}
 	r := newRouterFor(t, cat, nil, fl, nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/apps/firefox/launch", nil)
+	req := authedRequest(http.MethodPost, "/api/apps/firefox/launch", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -125,7 +125,7 @@ func TestLaunchHandler_LauncherNoTerminal(t *testing.T) {
 	fl := &fakeLauncher{err: launcher.ErrNoTerminalEmulator}
 	r := newRouterFor(t, cat, nil, fl, nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/apps/vim/launch", nil)
+	req := authedRequest(http.MethodPost, "/api/apps/vim/launch", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -151,7 +151,7 @@ func TestLaunchHandler_LauncherGenericError(t *testing.T) {
 	fl := &fakeLauncher{err: errors.New("boom: secret path /home/sasha leaked")}
 	r := newRouterFor(t, cat, nil, fl, nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/apps/firefox/launch", nil)
+	req := authedRequest(http.MethodPost, "/api/apps/firefox/launch", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -180,7 +180,7 @@ func TestLaunchHandler_PassesEntryToLauncher(t *testing.T) {
 	fl := &fakeLauncher{pid: 42}
 	r := newRouterFor(t, cat, nil, fl, nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/apps/firefox/launch", nil)
+	req := authedRequest(http.MethodPost, "/api/apps/firefox/launch", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -206,7 +206,7 @@ func TestLaunchHandler_MethodNotAllowed(t *testing.T) {
 	})
 	r := newRouterFor(t, cat, nil, nil, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/apps/firefox/launch", nil)
+	req := authedRequest(http.MethodGet, "/api/apps/firefox/launch", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 

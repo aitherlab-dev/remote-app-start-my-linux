@@ -41,12 +41,28 @@ func TestRouter_StatusEndpoint(t *testing.T) {
 
 func TestRouter_AppsEndpoint(t *testing.T) {
 	r := newTestRouter(t)
-	req := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
+	req := authedRequest(http.MethodGet, "/api/apps", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("status = %d, want 200", w.Code)
+	}
+}
+
+// TestRouter_AppsEndpoint_Unauthorized pins the S4.2a behaviour: the
+// /api/apps endpoint must now reject requests that arrive without a
+// valid Bearer token. A request built with the plain httptest helper
+// has no Authorization header, so the middleware should intercept it
+// before the handler ever runs.
+func TestRouter_AppsEndpoint_Unauthorized(t *testing.T) {
+	r := newTestRouter(t)
+	req := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", w.Code)
 	}
 }
 

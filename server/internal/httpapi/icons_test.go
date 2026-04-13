@@ -51,7 +51,7 @@ func TestIconsHandler_FoundPNG(t *testing.T) {
 	})
 	r := newTestRouterWith(t, cat, finder)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/apps/firefox/icon?size=48", nil)
+	req := authedRequest(http.MethodGet, "/api/apps/firefox/icon?size=48", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -79,7 +79,7 @@ func TestIconsHandler_FoundSVG(t *testing.T) {
 	})
 	r := newTestRouterWith(t, cat, finder)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/apps/firefox/icon?size=128", nil)
+	req := authedRequest(http.MethodGet, "/api/apps/firefox/icon?size=128", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -107,7 +107,7 @@ func TestIconsHandler_DefaultSize(t *testing.T) {
 	})
 	r := newTestRouterWith(t, cat, finder)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/apps/firefox/icon", nil)
+	req := authedRequest(http.MethodGet, "/api/apps/firefox/icon", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -132,7 +132,7 @@ func TestIconsHandler_SizeClampedHigh(t *testing.T) {
 	})
 	r := newTestRouterWith(t, cat, finder)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/apps/firefox/icon?size=9999", nil)
+	req := authedRequest(http.MethodGet, "/api/apps/firefox/icon?size=9999", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -153,7 +153,7 @@ func TestIconsHandler_SizeClampedLow(t *testing.T) {
 	})
 	r := newTestRouterWith(t, cat, finder)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/apps/firefox/icon?size=1", nil)
+	req := authedRequest(http.MethodGet, "/api/apps/firefox/icon?size=1", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -172,7 +172,7 @@ func TestIconsHandler_BadSize(t *testing.T) {
 	finder := newTestFinder(t, nil)
 	r := newTestRouterWith(t, cat, finder)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/apps/firefox/icon?size=abc", nil)
+	req := authedRequest(http.MethodGet, "/api/apps/firefox/icon?size=abc", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -196,7 +196,7 @@ func TestIconsHandler_AppNotFound(t *testing.T) {
 	finder := newTestFinder(t, nil)
 	r := newTestRouterWith(t, cat, finder)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/apps/nonexistent/icon", nil)
+	req := authedRequest(http.MethodGet, "/api/apps/nonexistent/icon", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -225,7 +225,7 @@ func TestIconsHandler_AppHasNoIcon(t *testing.T) {
 	finder := newTestFinder(t, nil)
 	r := newTestRouterWith(t, cat, finder)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/apps/noicon/icon", nil)
+	req := authedRequest(http.MethodGet, "/api/apps/noicon/icon", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -252,7 +252,7 @@ func TestIconsHandler_IconFileNotFound(t *testing.T) {
 	finder := newTestFinder(t, nil)
 	r := newTestRouterWith(t, cat, finder)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/apps/firefox/icon", nil)
+	req := authedRequest(http.MethodGet, "/api/apps/firefox/icon", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
@@ -280,7 +280,7 @@ func TestRouter_IconsEndpoint(t *testing.T) {
 	finder := newTestFinder(t, nil)
 	r := newTestRouterWith(t, cat, finder)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/apps/whatever/icon", nil)
+	req := authedRequest(http.MethodGet, "/api/apps/whatever/icon", nil)
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
