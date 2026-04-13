@@ -51,13 +51,14 @@ func main() {
 }
 
 func run(args []string) error {
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	slog.SetDefault(logger)
-
 	cfg, err := config.Load(args)
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+
+	logger := buildLogger(cfg)
+	slog.SetDefault(logger)
+
 	if cfg.Paths.ConfigFile != "" {
 		slog.Info("config loaded", "path", cfg.Paths.ConfigFile)
 	}

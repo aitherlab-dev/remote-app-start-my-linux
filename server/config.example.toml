@@ -40,8 +40,6 @@
                                     # blank means $XDG_CONFIG_HOME/remotelauncher
 
 [logging]
-# Logging.* is wired for S5.2 — currently the server still runs with a
-# text slog handler at INFO regardless of these values. Filling them in
-# ahead of time lets you freeze your intended config.
 # level  = "info"                   # debug | info | warn | error
-# format = "text"                   # text | json
+# format = "text"                   # text | json — json emits structured
+                                    # records that journalctl/fluentbit can parse
