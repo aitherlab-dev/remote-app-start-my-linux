@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/sasha/remotelauncher/internal/catalog"
 	"github.com/sasha/remotelauncher/internal/icons"
@@ -39,7 +38,7 @@ func newTestFinder(t *testing.T, files map[string][]byte) *icons.Finder {
 // would hit it, including r.PathValue resolution.
 func newTestRouterWith(t *testing.T, cat *catalog.Catalog, finder *icons.Finder) http.Handler {
 	t.Helper()
-	return NewRouter("dev", time.Now().Add(-time.Second), cat, finder)
+	return newRouterFor(t, cat, finder, nil, nil)
 }
 
 func TestIconsHandler_FoundPNG(t *testing.T) {

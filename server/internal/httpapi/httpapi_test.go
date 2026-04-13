@@ -2,12 +2,69 @@ package httpapi
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/sasha/remotelauncher/internal/catalog"
+	"github.com/sasha/remotelauncher/internal/desktop"
+	"github.com/sasha/remotelauncher/internal/icons"
 )
+
+// fakeLauncher is the AppLauncher test double used across launch /
+// router tests. It records the entry it was called with and returns
+// the configured pid/err pair.
+type fakeLauncher struct {
+	pid    int
+	err    error
+	called desktop.Entry
+	calls  int
+}
+
+func (f *fakeLauncher) Launch(e desktop.Entry) (int, error) {
+	f.called = e
+	f.calls++
+	return f.pid, f.err
+}
+
+// fakeAlive is the AliveChecker test double. It reports true for any
+// id present in the alive set and false otherwise.
+type fakeAlive struct {
+	alive map[string]bool
+}
+
+func (f *fakeAlive) Alive(id string) bool {
+	if f == nil || f.alive == nil {
+		return false
+	}
+	return f.alive[id]
+}
+
+// newRouterFor builds a router with sensible test defaults. Pass nil
+// for collaborators that should be left out of the test (the router
+// will still wire them up, but the handler endpoint won't be hit).
+func newRouterFor(t *testing.T, c *catalog.Catalog, finder *icons.Finder, l AppLauncher, alive AliveChecker) http.Handler {
+	t.Helper()
+	if finder == nil {
+		finder = icons.New([]string{t.TempDir()}, "hicolor")
+	}
+	if l == nil {
+		l = &fakeLauncher{}
+	}
+	if alive == nil {
+		alive = &fakeAlive{}
+	}
+	return NewRouter(RouterDeps{
+		Version:   "dev",
+		StartedAt: time.Now().Add(-time.Second),
+		Catalog:   c,
+		Finder:    finder,
+		Launcher:  l,
+		Alive:     alive,
+	})
+}
 
 const desktopTemplate = `[Desktop Entry]
 Type=Application

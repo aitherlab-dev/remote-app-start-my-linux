@@ -13,6 +13,7 @@ import (
 	"github.com/sasha/remotelauncher/internal/catalog"
 	"github.com/sasha/remotelauncher/internal/httpapi"
 	"github.com/sasha/remotelauncher/internal/icons"
+	"github.com/sasha/remotelauncher/internal/launcher"
 )
 
 // Version is set via -ldflags "-X main.Version=<tag>" at release build
@@ -20,12 +21,13 @@ import (
 var Version = "dev"
 
 const (
-	listenAddr         = ":8765"
-	readHeaderTimeout  = 5 * time.Second
-	readTimeout        = 30 * time.Second
-	writeTimeout       = 30 * time.Second
-	idleTimeout        = 120 * time.Second
-	shutdownGraceLimit = 10 * time.Second
+	listenAddr           = ":8765"
+	readHeaderTimeout    = 5 * time.Second
+	readTimeout          = 30 * time.Second
+	writeTimeout         = 30 * time.Second
+	idleTimeout          = 120 * time.Second
+	shutdownGraceLimit   = 10 * time.Second
+	trackerCleanupPeriod = 5 * time.Second
 )
 
 func main() {
@@ -53,7 +55,24 @@ func run() error {
 
 	finder := icons.New(nil, os.Getenv("REMOTELAUNCHER_ICON_THEME"))
 
-	handler := httpapi.NewRouter(Version, startedAt, cat, finder)
+	tracker := launcher.NewTracker()
+	laun := launcher.New(tracker)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// CleanupLoop is bound to the same signal context as the HTTP
+	// server so it stops as soon as SIGTERM/SIGINT arrives.
+	go tracker.CleanupLoop(ctx, trackerCleanupPeriod)
+
+	handler := httpapi.NewRouter(httpapi.RouterDeps{
+		Version:   Version,
+		StartedAt: startedAt,
+		Catalog:   cat,
+		Finder:    finder,
+		Launcher:  laun,
+		Alive:     tracker,
+	})
 
 	srv := &http.Server{
 		Addr:              listenAddr,
@@ -63,9 +82,6 @@ func run() error {
 		WriteTimeout:      writeTimeout,
 		IdleTimeout:       idleTimeout,
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	serverErr := make(chan error, 1)
 	go func() {

@@ -9,17 +9,30 @@ import (
 	"github.com/sasha/remotelauncher/internal/icons"
 )
 
+// RouterDeps bundles the collaborators NewRouter needs to wire up the
+// REST API. Grouping them in a struct keeps the call-site readable as
+// the dependency list grows (each new handler adds one more field).
+type RouterDeps struct {
+	Version   string
+	StartedAt time.Time
+	Catalog   *catalog.Catalog
+	Finder    *icons.Finder
+	Launcher  AppLauncher
+	Alive     AliveChecker
+}
+
 // NewRouter builds the top-level http.Handler for the REST API.
 //
 // Routing uses the Go 1.22+ method-aware patterns of http.ServeMux:
 // mismatched methods on a registered path are returned as 405 with an
 // Allow header, unknown paths fall through to a JSON 404 via the
 // wrapNotFoundJSON middleware.
-func NewRouter(version string, startedAt time.Time, c *catalog.Catalog, f *icons.Finder) http.Handler {
+func NewRouter(d RouterDeps) http.Handler {
 	mux := http.NewServeMux()
-	mux.Handle("GET /api/status", NewStatusHandler(version, startedAt, c))
-	mux.Handle("GET /api/apps", NewAppsHandler(c))
-	mux.Handle("GET /api/apps/{id}/icon", NewIconsHandler(c, f))
+	mux.Handle("GET /api/status", NewStatusHandler(d.Version, d.StartedAt, d.Catalog))
+	mux.Handle("GET /api/apps", NewAppsHandler(d.Catalog, d.Alive))
+	mux.Handle("GET /api/apps/{id}/icon", NewIconsHandler(d.Catalog, d.Finder))
+	mux.Handle("POST /api/apps/{id}/launch", NewLaunchHandler(d.Catalog, d.Launcher))
 	return wrapNotFoundJSON(mux)
 }
 

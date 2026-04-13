@@ -24,12 +24,18 @@ import (
 // Fields that could leak execution details or filesystem paths
 // (Exec, TryExec, Path, Hidden, OnlyShowIn, NotShowIn, StartupNotify)
 // are intentionally omitted — this type is what the REST API returns.
+//
+// The Running field is not populated by the catalog package itself —
+// the catalog never tracks process state. It is filled in by
+// httpapi.NewAppsHandler via an AliveChecker before the slice is
+// serialised to the client.
 type AppInfo struct {
 	ID         string   `json:"id"`
 	Name       string   `json:"name"`
 	Comment    string   `json:"comment,omitempty"`
 	Icon       string   `json:"icon,omitempty"`
 	Categories []string `json:"categories,omitempty"`
+	Running    bool     `json:"running"`
 	NoDisplay  bool     `json:"-"`
 }
 
