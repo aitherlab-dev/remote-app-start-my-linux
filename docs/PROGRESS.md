@@ -6,11 +6,11 @@
 3. `docs/ТЗ.md` — исходное техническое задание
 4. `CLAUDE.md` в корне
 
-## Текущее состояние: S5.1 завершён, Фаза 5 в работе
+## Текущее состояние: Фаза 5 завершена — сервер MVP-готов
 
-20 коммитов в `main`. Последний: `393f2d7 feat(config): TOML config with defaults→file→env→flags precedence`.
+26 коммитов в `main`. Последний feat-коммит: `c99908f feat(build): README, ldflags version, final green run`.
 
-**Сервер полностью функциональный и защищённый**, готов к `make install`-этапу (который ещё не сделан).
+**Сервер полностью функциональный, защищённый и упакованный**. Ставится на машину одной командой `make install`: бинарь уезжает в `~/.local/bin/`, systemd user-unit в `~/.config/systemd/user/`, сервис поднимается через `enable --now`. Можно раздавать как MVP.
 
 ### Что сервер умеет прямо сейчас
 
@@ -63,16 +63,20 @@
 
 ### Фаза 5 — Упаковка
 - `393f2d7 feat(config): TOML config with defaults→file→env→flags precedence` (S5.1)
+- `8c1a425 feat(log): slog level and format from config` (S5.2)
+- `b2028e2 feat(packaging): systemd user unit and make install/uninstall/package` (S5.3)
+- `c99908f feat(build): README, ldflags version, final green run` (S5.4)
+
+### Финальные цифры сервера
+
+- Покрытие ядра: catalog 100%, desktop 91.9%, icons 94.0%, launcher 98.2%
+- Покрытие API/auth: httpapi 90.4%, auth 88.0%
+- Config/tls: config 92.0%, tlsutil 86.4%
+- Суммарно: 87.2% statements
+- Бинарь: 10.3 MiB, одна внешняя зависимость (`BurntSushi/toml`)
+- `version` в `/api/status` вшивается через `-ldflags -X main.Version=$(git describe)`
 
 ## Что осталось
-
-### Фаза 5 — Упаковка сервера (оставшиеся 3 этапа)
-
-- **S5.2 — `log/slog` уровень из конфига**: slog уже используется, нужен только конфигурируемый level (debug/info/warn/error) и формат (json/text). Плотность S.
-- **S5.3 — systemd user-unit + install.sh**: `packaging/remotelauncher.service`, `install.sh` копирует бинарь в `~/.local/bin/`, unit в `~/.config/systemd/user/`, enable-now. `make install/uninstall/package`. Плотность M.
-- **S5.4 — README + финальный прогон**: README сервера, version через `-ldflags`, финальные тесты. Плотность S.
-
-После S5.4 сервер считается готовым к MVP и ставится на машину через `make install`.
 
 ### Фаза A — Android-клиент
 
@@ -92,13 +96,13 @@
 - **Commits в Conventional Commits** с обязательным `Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>` trailer
 - **Команды агентов через TeamCreate**, не через Agent — это требование из глобальных инструкций пользователя
 
-## Как стартовать новую сессию над S5.1
+## Как стартовать новую сессию над Android-клиентом
 
 ```
 /init   # уже запускался, CLAUDE.md есть
 # прочитать docs/PROGRESS.md, /home/sasha/.claude/plans/bubbly-greeting-knuth.md
-# собрать команду TeamCreate remotelauncher-s5-1 с developer + reviewer
-# этапы 5.1 → 5.2 → 5.3 → 5.4 последовательно
+# первый шаг — A0.1: установить JDK, Android Studio, SDK Platform 35,
+# настроить ANDROID_HOME и PATH, подключить телефон с USB-debug
 ```
 
-После S5.4 — готов MVP-сервер. Решать, идём ли мы во Фазу A (Android) — это длинный блок с установкой Android SDK.
+Сервер — закрытая история на уровне MVP. Следующая длинная секция — Android: установка инструментов, скелет проекта, Connect/Pairing/Apps/Launch/HTTPS/Release. Полная декомпозиция — в плане, раздел «A0…A6».
