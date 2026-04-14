@@ -29,6 +29,8 @@ type flagOverrides struct {
 	iconTheme         *string
 	logLevel          *string
 	logFormat         *string
+	webEnabled        *bool
+	webListenAddr     *string
 }
 
 // ApplyFlags parses args as command-line flags and applies only the
@@ -70,6 +72,8 @@ func parseFlags(args []string, errOut io.Writer) (flagOverrides, error) {
 		iconTheme         string
 		logLevel          string
 		logFormat         string
+		webEnabled        bool
+		webListenAddr     string
 	)
 
 	fs.StringVar(&configPath, "config", "", "path to the TOML config file")
@@ -88,6 +92,8 @@ func parseFlags(args []string, errOut io.Writer) (flagOverrides, error) {
 	fs.StringVar(&iconTheme, "icon-theme", "", "XDG icon theme name to prefer when serving icons")
 	fs.StringVar(&logLevel, "log-level", "", "slog level: debug | info | warn | error")
 	fs.StringVar(&logFormat, "log-format", "", "slog handler format: text | json")
+	fs.BoolVar(&webEnabled, "web-enabled", false, "serve the local admin UI on a separate loopback port")
+	fs.StringVar(&webListenAddr, "web-listen", "", "address for the local admin UI, host:port (must be loopback)")
 
 	if err := fs.Parse(args); err != nil {
 		return flagOverrides{}, fmt.Errorf("parse flags: %w", err)
@@ -144,6 +150,12 @@ func parseFlags(args []string, errOut io.Writer) (flagOverrides, error) {
 		case "log-format":
 			v := logFormat
 			o.logFormat = &v
+		case "web-enabled":
+			v := webEnabled
+			o.webEnabled = &v
+		case "web-listen":
+			v := webListenAddr
+			o.webListenAddr = &v
 		}
 	})
 	return o, nil
@@ -194,5 +206,11 @@ func (c *Config) applyFlagOverrides(o flagOverrides) {
 	}
 	if o.logFormat != nil {
 		c.Logging.Format = *o.logFormat
+	}
+	if o.webEnabled != nil {
+		c.Web.Enabled = *o.webEnabled
+	}
+	if o.webListenAddr != nil {
+		c.Web.ListenAddr = *o.webListenAddr
 	}
 }

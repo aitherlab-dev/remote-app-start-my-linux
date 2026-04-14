@@ -61,6 +61,12 @@ func (c *Config) applyEnvFrom(look Lookuper) error {
 	if err := envDuration(look, "REMOTELAUNCHER_PAIR_RATE_WINDOW", &c.Auth.RateLimitWindow); err != nil {
 		return err
 	}
+	if err := envBool(look, "REMOTELAUNCHER_WEB_ENABLED", &c.Web.Enabled); err != nil {
+		return err
+	}
+	if err := envString(look, "REMOTELAUNCHER_WEB_LISTEN_ADDR", &c.Web.ListenAddr); err != nil {
+		return err
+	}
 	if err := envString(look, "REMOTELAUNCHER_CERT_DIR", &c.Paths.CertDir); err != nil {
 		return err
 	}
@@ -108,5 +114,18 @@ func envInt(look Lookuper, key string, dst *int) error {
 		return fmt.Errorf("%s: parse int %q: %w", key, v, err)
 	}
 	*dst = n
+	return nil
+}
+
+func envBool(look Lookuper, key string, dst *bool) error {
+	v, ok := look(key)
+	if !ok {
+		return nil
+	}
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return fmt.Errorf("%s: parse bool %q: %w", key, v, err)
+	}
+	*dst = b
 	return nil
 }

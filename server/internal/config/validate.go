@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net"
 	"strings"
 	"time"
 )
@@ -54,6 +55,44 @@ func (c *Config) Validate() error {
 	}
 	if err := validateLogFormat(c.Logging.Format); err != nil {
 		return err
+	}
+	if c.Web.Enabled {
+		if err := validateWebListenAddr(c.Web.ListenAddr); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateWebListenAddr refuses any non-loopback host for the admin
+// UI listener. The UI is unauthenticated and runs over plain HTTP, so
+// binding it to 0.0.0.0 or a LAN address would expose every local
+// operation (launching apps, toggling visibility) to the network.
+// Accepted forms are empty-host (":port", which binds all interfaces
+// — also refused), "127.0.0.1:port", "localhost:port", "[::1]:port".
+func validateWebListenAddr(addr string) error {
+	if strings.TrimSpace(addr) == "" {
+		return fmt.Errorf("web.listen_addr must not be empty when web.enabled is true")
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("web.listen_addr %q: %w", addr, err)
+	}
+	if strings.TrimSpace(port) == "" {
+		return fmt.Errorf("web.listen_addr %q: port must not be empty", addr)
+	}
+	if host == "" {
+		return fmt.Errorf("web.listen_addr %q: host must be a loopback address (127.0.0.1, ::1 or localhost)", addr)
+	}
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return fmt.Errorf("web.listen_addr %q: host must be a loopback address (127.0.0.1, ::1 or localhost)", addr)
+	}
+	if !ip.IsLoopback() {
+		return fmt.Errorf("web.listen_addr %q: host must be a loopback address, got %s", addr, ip)
 	}
 	return nil
 }

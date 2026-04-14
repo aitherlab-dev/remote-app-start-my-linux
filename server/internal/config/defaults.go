@@ -26,6 +26,10 @@ func Defaults() Config {
 			RateLimitGlobal: 20,
 			RateLimitWindow: 10 * time.Minute,
 		},
+		Web: WebConfig{
+			Enabled:    true,
+			ListenAddr: "127.0.0.1:17843",
+		},
 		Paths: PathsConfig{
 			CertDir:    "",
 			ConfigFile: "",

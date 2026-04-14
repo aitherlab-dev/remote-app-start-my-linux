@@ -16,7 +16,7 @@ func TestAppsHandler_ReturnsList(t *testing.T) {
 		"beta.desktop":  desktopEntry("Beta", "beta", "B", "b-icon", "Utility"),
 	})
 
-	h := NewAppsHandler(cat, nil)
+	h := NewAppsHandler(cat, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
@@ -53,7 +53,7 @@ func TestAppsHandler_ReturnsList(t *testing.T) {
 func TestAppsHandler_EmptyCatalog(t *testing.T) {
 	cat := newTestCatalog(t, nil)
 
-	h := NewAppsHandler(cat, nil)
+	h := NewAppsHandler(cat, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
@@ -69,6 +69,59 @@ func TestAppsHandler_EmptyCatalog(t *testing.T) {
 	}
 }
 
+func TestAppsHandler_FiltersHiddenApps(t *testing.T) {
+	cat := newTestCatalog(t, map[string]string{
+		"alpha.desktop": desktopEntry("Alpha", "alpha", "", "", ""),
+		"beta.desktop":  desktopEntry("Beta", "beta", "", "", ""),
+		"gamma.desktop": desktopEntry("Gamma", "gamma", "", "", ""),
+	})
+	vis := &fakeVisibility{hidden: map[string]bool{"beta": true}}
+
+	h := NewAppsHandler(cat, nil, vis)
+	req := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	var list []catalog.AppInfo
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got, want := len(list), 2; got != want {
+		t.Fatalf("len = %d, want %d", got, want)
+	}
+	for _, a := range list {
+		if a.ID == "beta" {
+			t.Errorf("hidden app %q leaked into response", a.ID)
+		}
+	}
+}
+
+func TestAppsHandler_FilterKeepsRunningFlag(t *testing.T) {
+	cat := newTestCatalog(t, map[string]string{
+		"alpha.desktop": desktopEntry("Alpha", "alpha", "", "", ""),
+		"beta.desktop":  desktopEntry("Beta", "beta", "", "", ""),
+	})
+	alive := &fakeAlive{alive: map[string]bool{"alpha": true, "beta": true}}
+	vis := &fakeVisibility{hidden: map[string]bool{"beta": true}}
+
+	h := NewAppsHandler(cat, alive, vis)
+	req := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+
+	var list []catalog.AppInfo
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != "alpha" || !list[0].Running {
+		t.Errorf("list = %+v, want only alpha running", list)
+	}
+}
+
 func TestAppsHandler_RunningStatus(t *testing.T) {
 	cat := newTestCatalog(t, map[string]string{
 		"alpha.desktop": desktopEntry("Alpha", "alpha", "", "", ""),
@@ -76,7 +129,7 @@ func TestAppsHandler_RunningStatus(t *testing.T) {
 	})
 	alive := &fakeAlive{alive: map[string]bool{"alpha": true}}
 
-	h := NewAppsHandler(cat, alive)
+	h := NewAppsHandler(cat, alive, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)

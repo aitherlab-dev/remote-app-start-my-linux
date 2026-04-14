@@ -20,6 +20,7 @@ type RouterDeps struct {
 	Finder      *icons.Finder
 	Launcher    AppLauncher
 	Alive       AliveChecker
+	Visibility  VisibilityChecker
 	Fingerprint string
 	TokenStore  *auth.Store
 	PINProvider PINProvider
@@ -49,7 +50,7 @@ func NewRouter(d RouterDeps) http.Handler {
 	} else {
 		mux.Handle("POST /api/pair", pairHandler)
 	}
-	mux.Handle("GET /api/apps", auth.RequireToken(d.TokenStore, NewAppsHandler(d.Catalog, d.Alive)))
+	mux.Handle("GET /api/apps", auth.RequireToken(d.TokenStore, NewAppsHandler(d.Catalog, d.Alive, d.Visibility)))
 	mux.Handle("GET /api/apps/{id}/icon", auth.RequireToken(d.TokenStore, NewIconsHandler(d.Catalog, d.Finder)))
 	mux.Handle("POST /api/apps/{id}/launch", auth.RequireToken(d.TokenStore, NewLaunchHandler(d.Catalog, d.Launcher)))
 	return wrapNotFoundJSON(mux)

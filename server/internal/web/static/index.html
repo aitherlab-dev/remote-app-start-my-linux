@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="ru" data-theme="night">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>RemoteLauncher — Admin</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css"
+    />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+      };
+    </script>
+    <script
+      defer
+      src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"
+    ></script>
+    <style>
+      .app-card {
+        transition:
+          transform 120ms ease,
+          box-shadow 120ms ease,
+          opacity 120ms ease;
+      }
+      .app-card:hover {
+        transform: translateY(-2px);
+      }
+      .app-card.is-hidden {
+        opacity: 0.45;
+      }
+      .icon-fallback {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 56px;
+        height: 56px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.06);
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 22px;
+        font-weight: 600;
+        flex-shrink: 0;
+      }
+      .icon-img {
+        width: 56px;
+        height: 56px;
+        border-radius: 12px;
+        object-fit: contain;
+        background: rgba(255, 255, 255, 0.04);
+        padding: 6px;
+        flex-shrink: 0;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        background: radial-gradient(
+            1200px 600px at 15% -10%,
+            rgba(120, 119, 198, 0.2),
+            transparent 60%
+          ),
+          radial-gradient(
+            900px 500px at 85% 120%,
+            rgba(255, 120, 180, 0.12),
+            transparent 60%
+          ),
+          hsl(var(--b2));
+      }
+    </style>
+  </head>
+  <body class="min-h-screen text-base-content">
+    <div
+      x-data="adminApp()"
+      x-init="load()"
+      class="mx-auto max-w-6xl px-4 pb-16 pt-8"
+    >
+      <header class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 class="text-3xl font-bold tracking-tight">RemoteLauncher</h1>
+          <p class="mt-1 text-sm opacity-70">
+            Админка сервера — фильтрация приложений для Android-клиента
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="badge badge-ghost gap-2">
+            <span x-text="apps.length"></span>
+            <span class="opacity-60">всего</span>
+          </div>
+          <div class="badge badge-primary gap-2">
+            <span x-text="visibleCount"></span>
+            <span class="opacity-80">видно</span>
+          </div>
+          <div class="badge badge-warning gap-2">
+            <span x-text="hiddenCount"></span>
+            <span class="opacity-80">скрыто</span>
+          </div>
+        </div>
+      </header>
+
+      <section class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <label class="input input-bordered flex flex-1 items-center gap-2">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            class="h-4 w-4 opacity-60"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M9 3.5a5.5 5.5 0 1 0 3.36 9.85l3.14 3.15a.75.75 0 1 0 1.06-1.06l-3.15-3.14A5.5 5.5 0 0 0 9 3.5zM5 9a4 4 0 1 1 8 0 4 4 0 0 1-8 0z"
+              clip-rule="evenodd"
+            />
+          </svg>
+          <input
+            type="text"
+            class="grow"
+            placeholder="Поиск по имени или id..."
+            x-model="query"
+          />
+          <kbd class="kbd kbd-sm" x-show="query" x-on:click="query = ''"
+            >×</kbd
+          >
+        </label>
+        <div class="join">
+          <button
+            class="btn join-item btn-sm"
+            :class="filter === 'all' ? 'btn-active' : ''"
+            x-on:click="filter = 'all'"
+          >
+            Все
+          </button>
+          <button
+            class="btn join-item btn-sm"
+            :class="filter === 'visible' ? 'btn-active' : ''"
+            x-on:click="filter = 'visible'"
+          >
+            Видимые
+          </button>
+          <button
+            class="btn join-item btn-sm"
+            :class="filter === 'hidden' ? 'btn-active' : ''"
+            x-on:click="filter = 'hidden'"
+          >
+            Скрытые
+          </button>
+        </div>
+      </section>
+
+      <section
+        class="rounded-xl border border-base-300/60 bg-base-100/40 p-3 shadow-sm backdrop-blur"
+      >
+        <template x-if="loading">
+          <div class="flex justify-center py-20">
+            <span class="loading loading-spinner loading-lg text-primary"></span>
+          </div>
+        </template>
+        <template x-if="!loading && filtered.length === 0">
+          <div class="py-16 text-center opacity-60">
+            <p class="text-lg">Ничего не найдено</p>
+            <p class="mt-1 text-sm">Попробуй другой запрос или фильтр</p>
+          </div>
+        </template>
+        <div
+          x-show="!loading && filtered.length > 0"
+          class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        >
+          <template x-for="app in filtered" :key="app.id">
+            <div
+              class="app-card flex items-center gap-3 rounded-lg border border-base-300/60 bg-base-100 p-3 shadow-sm"
+              :class="app.hidden ? 'is-hidden' : ''"
+            >
+              <template x-if="app.has_icon">
+                <img
+                  class="icon-img"
+                  :src="'/api/apps/' + encodeURIComponent(app.id) + '/icon?size=96'"
+                  :alt="app.name"
+                  loading="lazy"
+                  x-on:error="app.has_icon = false"
+                />
+              </template>
+              <template x-if="!app.has_icon">
+                <div class="icon-fallback" x-text="initial(app.name)"></div>
+              </template>
+              <div class="min-w-0 flex-1">
+                <div class="truncate text-base font-semibold" x-text="app.name"></div>
+                <div
+                  class="truncate text-xs opacity-60"
+                  x-text="app.id"
+                ></div>
+                <template x-if="app.comment">
+                  <div
+                    class="mt-0.5 truncate text-xs opacity-50"
+                    x-text="app.comment"
+                  ></div>
+                </template>
+              </div>
+              <label class="swap swap-flip cursor-pointer" :title="app.hidden ? 'Показать' : 'Скрыть'">
+                <input
+                  type="checkbox"
+                  :checked="!app.hidden"
+                  x-on:change="toggle(app)"
+                />
+                <div class="swap-on text-success">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-7 w-7">
+                    <path d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/>
+                  </svg>
+                </div>
+                <div class="swap-off opacity-60">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-7 w-7">
+                    <path d="M2.27 3.72 3.68 2.3 21.7 20.32l-1.41 1.41-3.1-3.1A12.7 12.7 0 0 1 12 19c-7 0-10-7-10-7a17 17 0 0 1 4.22-5.36L2.27 3.72zM12 7c-.37 0-.72.04-1.07.11l7 7c.07-.35.11-.7.11-1.07a6 6 0 0 0-6-6zm0-2c7 0 10 7 10 7a16.47 16.47 0 0 1-3.1 4.3l-1.43-1.43A14.6 14.6 0 0 0 19.67 12C18.93 10.74 16.4 7 12 7l-1.5.08-1.6-1.6C9.52 5.17 10.73 5 12 5z"/>
+                  </svg>
+                </div>
+              </label>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <div
+        class="toast toast-end toast-bottom"
+        x-show="toast.visible"
+        x-transition
+      >
+        <div
+          class="alert"
+          :class="toast.kind === 'error' ? 'alert-error' : 'alert-success'"
+        >
+          <span x-text="toast.text"></span>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function adminApp() {
+        return {
+          apps: [],
+          loading: true,
+          query: "",
+          filter: "all",
+          toast: { visible: false, text: "", kind: "success" },
+          toastTimer: null,
+
+          get filtered() {
+            const q = this.query.trim().toLowerCase();
+            return this.apps.filter((a) => {
+              if (this.filter === "visible" && a.hidden) return false;
+              if (this.filter === "hidden" && !a.hidden) return false;
+              if (!q) return true;
+              return (
+                a.name.toLowerCase().includes(q) ||
+                a.id.toLowerCase().includes(q) ||
+                (a.comment && a.comment.toLowerCase().includes(q))
+              );
+            });
+          },
+
+          get visibleCount() {
+            return this.apps.filter((a) => !a.hidden).length;
+          },
+          get hiddenCount() {
+            return this.apps.filter((a) => a.hidden).length;
+          },
+
+          initial(name) {
+            return (name || "?").trim().charAt(0).toUpperCase();
+          },
+
+          async load() {
+            this.loading = true;
+            try {
+              const res = await fetch("/api/apps");
+              if (!res.ok) throw new Error("status " + res.status);
+              const list = await res.json();
+              this.apps = list.map((a) => ({ ...a, has_icon: !!a.has_icon }));
+            } catch (e) {
+              this.showToast("Не удалось загрузить список: " + e.message, "error");
+              this.apps = [];
+            } finally {
+              this.loading = false;
+            }
+          },
+
+          async toggle(app) {
+            app.hidden = !app.hidden;
+            const hidden = this.apps.filter((a) => a.hidden).map((a) => a.id);
+            try {
+              const res = await fetch("/api/visibility", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ hidden }),
+              });
+              if (!res.ok) throw new Error("status " + res.status);
+              this.showToast(
+                app.hidden ? `Скрыто: ${app.name}` : `Показано: ${app.name}`,
+                "success",
+              );
+            } catch (e) {
+              app.hidden = !app.hidden;
+              this.showToast("Не сохранилось: " + e.message, "error");
+            }
+          },
+
+          showToast(text, kind) {
+            this.toast = { visible: true, text, kind };
+            if (this.toastTimer) clearTimeout(this.toastTimer);
+            this.toastTimer = setTimeout(() => {
+              this.toast.visible = false;
+            }, 2400);
+          },
+        };
+      }
+    </script>
+  </body>
+</html>

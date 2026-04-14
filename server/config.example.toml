@@ -35,6 +35,13 @@
 # rate_limit_global = 20            # max /api/pair attempts across all clients per window
 # rate_limit_window = "10m"         # rolling window the two counters above apply to
 
+[web]
+# enabled     = true                # local admin UI for filtering which apps the
+                                    # phone sees. Served on a separate loopback
+                                    # port over plain HTTP (no TLS, no auth).
+# listen_addr = "127.0.0.1:17843"   # must be a loopback address — the config
+                                    # layer refuses anything else.
+
 [paths]
 # cert_dir = ""                     # override for TLS cert/key directory;
                                     # blank means $XDG_CONFIG_HOME/remotelauncher

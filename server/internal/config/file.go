@@ -22,6 +22,7 @@ type rawConfig struct {
 	Server    *rawServer   `toml:"server"`
 	Launcher  *rawLauncher `toml:"launcher"`
 	Auth      *rawAuth     `toml:"auth"`
+	Web       *rawWeb      `toml:"web"`
 	Paths     *rawPaths    `toml:"paths"`
 	Logging   *rawLogging  `toml:"logging"`
 	IconTheme *string      `toml:"icon_theme"`
@@ -45,6 +46,11 @@ type rawAuth struct {
 	RateLimitPerIP  *int    `toml:"rate_limit_per_ip"`
 	RateLimitGlobal *int    `toml:"rate_limit_global"`
 	RateLimitWindow *string `toml:"rate_limit_window"`
+}
+
+type rawWeb struct {
+	Enabled    *bool   `toml:"enabled"`
+	ListenAddr *string `toml:"listen_addr"`
 }
 
 type rawPaths struct {
@@ -98,6 +104,9 @@ func (r *rawConfig) applyTo(c *Config) error {
 			return err
 		}
 	}
+	if r.Web != nil {
+		r.Web.applyTo(&c.Web)
+	}
 	if r.Paths != nil {
 		r.Paths.applyTo(&c.Paths)
 	}
@@ -150,6 +159,15 @@ func (r *rawAuth) applyTo(c *AuthConfig) error {
 		return err
 	}
 	return nil
+}
+
+func (r *rawWeb) applyTo(c *WebConfig) {
+	if r.Enabled != nil {
+		c.Enabled = *r.Enabled
+	}
+	if r.ListenAddr != nil {
+		c.ListenAddr = *r.ListenAddr
+	}
 }
 
 func (r *rawPaths) applyTo(c *PathsConfig) {

@@ -96,6 +96,19 @@ func (f *fakeAlive) Alive(id string) bool {
 	return f.alive[id]
 }
 
+// fakeVisibility is the VisibilityChecker test double. It reports
+// true (i.e. hide this app) for any id present in the hidden set.
+type fakeVisibility struct {
+	hidden map[string]bool
+}
+
+func (f *fakeVisibility) IsHidden(id string) bool {
+	if f == nil || f.hidden == nil {
+		return false
+	}
+	return f.hidden[id]
+}
+
 // newRouterFor builds a router with sensible test defaults. Pass nil
 // for collaborators that should be left out of the test (the router
 // will still wire them up, but the handler endpoint won't be hit).

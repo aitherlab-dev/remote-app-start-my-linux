@@ -19,6 +19,8 @@ import (
 	"github.com/sasha/remotelauncher/internal/icons"
 	"github.com/sasha/remotelauncher/internal/launcher"
 	"github.com/sasha/remotelauncher/internal/tlsutil"
+	"github.com/sasha/remotelauncher/internal/visibility"
+	"github.com/sasha/remotelauncher/internal/web"
 )
 
 // Version is set via -ldflags "-X main.Version=<tag>" at release build
@@ -101,6 +103,13 @@ func run(args []string) error {
 	}
 	slog.Info("tls certificate ready", "cert", certPath, "fingerprint", fingerprint)
 
+	visibilityStore := visibility.NewStore()
+	visibilityPath := filepath.Join(certDir, "visibility.json")
+	if err := visibilityStore.Load(visibilityPath); err != nil {
+		return fmt.Errorf("load visibility: %w", err)
+	}
+	slog.Info("visibility loaded", "hidden", visibilityStore.Count(), "path", visibilityPath)
+
 	pinSession, err := auth.NewPINSession(cfg.Auth.PINTTL)
 	if err != nil {
 		return fmt.Errorf("create pin session: %w", err)
@@ -133,6 +142,7 @@ func run(args []string) error {
 		Finder:      finder,
 		Launcher:    laun,
 		Alive:       tracker,
+		Visibility:  visibilityStore,
 		Fingerprint: fingerprint,
 		TokenStore:  tokenStore,
 		PINProvider: pinSession,
@@ -158,9 +168,45 @@ func run(args []string) error {
 		close(serverErr)
 	}()
 
+	// The admin UI is a separate http.Server on a loopback address.
+	// It shares the same catalog / finder / visibility store so a
+	// toggle in the UI is immediately visible on the next /api/apps
+	// poll from the phone. Config validation refuses any non-loopback
+	// listen address, so we don't re-check here.
+	var webSrv *http.Server
+	webErr := make(chan error, 1)
+	if cfg.Web.Enabled {
+		webSrv = &http.Server{
+			Addr: cfg.Web.ListenAddr,
+			Handler: web.NewHandler(web.Deps{
+				Catalog:    cat,
+				Finder:     finder,
+				Visibility: visibilityStore,
+			}),
+			ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
+			ReadTimeout:       cfg.Server.ReadTimeout,
+			WriteTimeout:      cfg.Server.WriteTimeout,
+			IdleTimeout:       cfg.Server.IdleTimeout,
+		}
+		go func() {
+			slog.Info("web admin server starting", "addr", cfg.Web.ListenAddr)
+			if err := webSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				webErr <- err
+			}
+			close(webErr)
+		}()
+	} else {
+		close(webErr)
+		slog.Info("web admin server disabled")
+	}
+
 	select {
 	case err := <-serverErr:
 		return err
+	case err := <-webErr:
+		if err != nil {
+			return fmt.Errorf("web admin server: %w", err)
+		}
 	case <-ctx.Done():
 		slog.Info("shutdown signal received")
 	}
@@ -171,6 +217,13 @@ func run(args []string) error {
 		return err
 	}
 	slog.Info("https server stopped")
+	if webSrv != nil {
+		if err := webSrv.Shutdown(shutdownCtx); err != nil {
+			slog.Warn("web admin server shutdown", "err", err)
+		} else {
+			slog.Info("web admin server stopped")
+		}
+	}
 	return nil
 }
 

@@ -16,6 +16,7 @@ type Config struct {
 	Server    ServerConfig
 	Launcher  LauncherConfig
 	Auth      AuthConfig
+	Web       WebConfig
 	Paths     PathsConfig
 	Logging   LoggingConfig
 	IconTheme string
@@ -46,6 +47,18 @@ type AuthConfig struct {
 	RateLimitPerIP  int
 	RateLimitGlobal int
 	RateLimitWindow time.Duration
+}
+
+// WebConfig configures the local admin UI served on a separate HTTP
+// listener. The UI is plain HTTP (no TLS) and only binds to a loopback
+// address so a browser on the same machine as the server can open it
+// without the self-signed certificate warning that the main :8443
+// endpoint produces. ListenAddr is validated to refuse any non-loopback
+// host when Enabled is true — exposing the admin UI over the network
+// is a footgun the config layer refuses outright.
+type WebConfig struct {
+	Enabled    bool
+	ListenAddr string
 }
 
 // PathsConfig lets operators relocate filesystem state away from

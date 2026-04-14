@@ -56,6 +56,12 @@ func TestDefaults(t *testing.T) {
 	if got, want := c.IconTheme, ""; got != want {
 		t.Errorf("IconTheme = %q, want %q", got, want)
 	}
+	if got, want := c.Web.Enabled, true; got != want {
+		t.Errorf("Web.Enabled = %v, want %v", got, want)
+	}
+	if got, want := c.Web.ListenAddr, "127.0.0.1:17843"; got != want {
+		t.Errorf("Web.ListenAddr = %q, want %q", got, want)
+	}
 
 	if err := c.Validate(); err != nil {
 		t.Errorf("Defaults().Validate() = %v, want nil", err)
