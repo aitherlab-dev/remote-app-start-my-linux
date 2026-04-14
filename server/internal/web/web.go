@@ -24,6 +24,7 @@ import (
 	"github.com/sasha/remotelauncher/internal/catalog"
 	"github.com/sasha/remotelauncher/internal/httpapi"
 	"github.com/sasha/remotelauncher/internal/icons"
+	"github.com/sasha/remotelauncher/internal/shortcuts"
 	"github.com/sasha/remotelauncher/internal/visibility"
 )
 
@@ -36,9 +37,11 @@ var staticFS embed.FS
 // so changes saved from the UI are immediately visible on the next
 // /api/apps poll from the phone.
 type Deps struct {
-	Catalog    *catalog.Catalog
-	Finder     *icons.Finder
-	Visibility *visibility.Store
+	Catalog         *catalog.Catalog
+	Finder          *icons.Finder
+	Visibility      *visibility.Store
+	Shortcuts       *shortcuts.Store
+	DefaultTerminal string
 }
 
 // NewHandler builds the top-level http.Handler for the admin UI. It
@@ -60,9 +63,11 @@ func NewHandler(d Deps) http.Handler {
 	}
 	mux.Handle("GET /", http.FileServer(http.FS(sub)))
 
-	mux.Handle("GET /api/apps", NewAppsHandler(d.Catalog, d.Visibility))
+	mux.Handle("GET /api/apps", NewAppsHandler(d.Catalog, d.Visibility, d.Shortcuts))
 	mux.Handle("GET /api/apps/{id}/icon", httpapi.NewIconsHandler(d.Catalog, d.Finder))
 	mux.Handle("PUT /api/visibility", NewVisibilityHandler(d.Visibility))
+	mux.Handle("GET /api/shortcuts", NewShortcutsHandler(d.Shortcuts, d.DefaultTerminal))
+	mux.Handle("PUT /api/shortcuts", NewUpdateShortcutsHandler(d.Shortcuts))
 
 	return mux
 }

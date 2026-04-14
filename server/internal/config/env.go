@@ -49,6 +49,9 @@ func (c *Config) applyEnvFrom(look Lookuper) error {
 	if err := envDuration(look, "REMOTELAUNCHER_CLEANUP_PERIOD", &c.Launcher.CleanupPeriod); err != nil {
 		return err
 	}
+	if err := envString(look, "REMOTELAUNCHER_DEFAULT_TERMINAL", &c.Launcher.DefaultTerminal); err != nil {
+		return err
+	}
 	if err := envDuration(look, "REMOTELAUNCHER_PIN_TTL", &c.Auth.PINTTL); err != nil {
 		return err
 	}

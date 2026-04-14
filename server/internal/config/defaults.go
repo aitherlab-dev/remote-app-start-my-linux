@@ -18,7 +18,8 @@ func Defaults() Config {
 			ShutdownGrace:     10 * time.Second,
 		},
 		Launcher: LauncherConfig{
-			CleanupPeriod: 5 * time.Second,
+			CleanupPeriod:   5 * time.Second,
+			DefaultTerminal: "",
 		},
 		Auth: AuthConfig{
 			PINTTL:          10 * time.Minute,

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/sasha/remotelauncher/internal/catalog"
+	"github.com/sasha/remotelauncher/internal/shortcuts"
 )
 
 // AliveChecker is the small surface httpapi needs to decorate AppInfo
@@ -34,11 +35,31 @@ type VisibilityChecker interface {
 // reported as hidden is dropped before serialisation, so the phone
 // never sees entries the operator has masked in the admin UI. A nil
 // visibility checker disables filtering (all apps pass through).
-func NewAppsHandler(c *catalog.Catalog, alive AliveChecker, visibility VisibilityChecker) http.HandlerFunc {
+//
+// User-defined shortcuts from the ShortcutProvider are merged into
+// the list before the visibility filter so the operator can also
+// hide a custom shortcut from the phone if they want to. A nil
+// provider disables the feature entirely.
+func NewAppsHandler(
+	c *catalog.Catalog,
+	alive AliveChecker,
+	visibility VisibilityChecker,
+	provider ShortcutProvider,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		list := c.List()
 		if list == nil {
 			list = []catalog.AppInfo{}
+		}
+		if provider != nil {
+			for _, sc := range provider.List() {
+				list = append(list, catalog.AppInfo{
+					ID:      shortcuts.PrefixedID(sc.ID),
+					Name:    sc.Name,
+					Comment: sc.Command,
+					Icon:    "",
+				})
+			}
 		}
 		if visibility != nil {
 			filtered := list[:0]

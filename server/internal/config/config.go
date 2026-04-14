@@ -35,8 +35,13 @@ type ServerConfig struct {
 
 // LauncherConfig configures the process-tracking subsystem.
 // CleanupPeriod is how often the tracker reaps dead PIDs.
+// DefaultTerminal is the name of the terminal emulator used to run
+// custom shortcuts when the shortcut itself does not override it
+// (e.g. "kitty", "ghostty", "gnome-terminal"). A blank value means
+// "pick whatever is on PATH" via the launcher's built-in probe list.
 type LauncherConfig struct {
-	CleanupPeriod time.Duration
+	CleanupPeriod   time.Duration
+	DefaultTerminal string
 }
 
 // AuthConfig holds every knob the pairing and rate-limiting layer

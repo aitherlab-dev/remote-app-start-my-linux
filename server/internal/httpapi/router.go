@@ -14,18 +14,20 @@ import (
 // REST API. Grouping them in a struct keeps the call-site readable as
 // the dependency list grows (each new handler adds one more field).
 type RouterDeps struct {
-	Version     string
-	StartedAt   time.Time
-	Catalog     *catalog.Catalog
-	Finder      *icons.Finder
-	Launcher    AppLauncher
-	Alive       AliveChecker
-	Visibility  VisibilityChecker
-	Fingerprint string
-	TokenStore  *auth.Store
-	PINProvider PINProvider
-	TokenIssuer TokenIssuer
-	RateLimiter *auth.RateLimiter
+	Version         string
+	StartedAt       time.Time
+	Catalog         *catalog.Catalog
+	Finder          *icons.Finder
+	Launcher        AppLauncher
+	Alive           AliveChecker
+	Visibility      VisibilityChecker
+	Shortcuts       ShortcutProvider
+	DefaultTerminal string
+	Fingerprint     string
+	TokenStore      *auth.Store
+	PINProvider     PINProvider
+	TokenIssuer     TokenIssuer
+	RateLimiter     *auth.RateLimiter
 }
 
 // NewRouter builds the top-level http.Handler for the REST API.
@@ -50,9 +52,9 @@ func NewRouter(d RouterDeps) http.Handler {
 	} else {
 		mux.Handle("POST /api/pair", pairHandler)
 	}
-	mux.Handle("GET /api/apps", auth.RequireToken(d.TokenStore, NewAppsHandler(d.Catalog, d.Alive, d.Visibility)))
+	mux.Handle("GET /api/apps", auth.RequireToken(d.TokenStore, NewAppsHandler(d.Catalog, d.Alive, d.Visibility, d.Shortcuts)))
 	mux.Handle("GET /api/apps/{id}/icon", auth.RequireToken(d.TokenStore, NewIconsHandler(d.Catalog, d.Finder)))
-	mux.Handle("POST /api/apps/{id}/launch", auth.RequireToken(d.TokenStore, NewLaunchHandler(d.Catalog, d.Launcher)))
+	mux.Handle("POST /api/apps/{id}/launch", auth.RequireToken(d.TokenStore, NewLaunchHandler(d.Catalog, d.Launcher, d.Shortcuts, d.DefaultTerminal)))
 	return wrapNotFoundJSON(mux)
 }
 

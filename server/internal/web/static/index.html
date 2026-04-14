@@ -10,15 +10,30 @@
     />
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      tailwind.config = {
-        darkMode: "class",
-      };
+      tailwind.config = { darkMode: "class" };
     </script>
     <script
       defer
       src="https://unpkg.com/alpinejs@3.14.1/dist/cdn.min.js"
     ></script>
     <style>
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        background: radial-gradient(
+            1200px 600px at 15% -10%,
+            rgba(120, 119, 198, 0.2),
+            transparent 60%
+          ),
+          radial-gradient(
+            900px 500px at 85% 120%,
+            rgba(255, 120, 180, 0.12),
+            transparent 60%
+          ),
+          hsl(var(--b2));
+      }
       .app-card {
         transition:
           transform 120ms ease,
@@ -39,8 +54,8 @@
         height: 56px;
         border-radius: 12px;
         background: rgba(255, 255, 255, 0.06);
-        color: rgba(255, 255, 255, 0.4);
-        font-size: 22px;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 24px;
         font-weight: 600;
         flex-shrink: 0;
       }
@@ -53,22 +68,9 @@
         padding: 6px;
         flex-shrink: 0;
       }
-      html,
-      body {
-        height: 100%;
-      }
-      body {
-        background: radial-gradient(
-            1200px 600px at 15% -10%,
-            rgba(120, 119, 198, 0.2),
-            transparent 60%
-          ),
-          radial-gradient(
-            900px 500px at 85% 120%,
-            rgba(255, 120, 180, 0.12),
-            transparent 60%
-          ),
-          hsl(var(--b2));
+      .icon-shortcut {
+        background: linear-gradient(135deg, #4b70e0, #8c4fff);
+        color: #fff;
       }
     </style>
   </head>
@@ -82,7 +84,7 @@
         <div>
           <h1 class="text-3xl font-bold tracking-tight">RemoteLauncher</h1>
           <p class="mt-1 text-sm opacity-70">
-            Админка сервера — фильтрация приложений для Android-клиента
+            Админка сервера — фильтрация приложений и пользовательские ярлыки
           </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
@@ -101,134 +103,212 @@
         </div>
       </header>
 
-      <section class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
-        <label class="input input-bordered flex flex-1 items-center gap-2">
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 20 20"
-            fill="currentColor"
-            class="h-4 w-4 opacity-60"
-          >
-            <path
-              fill-rule="evenodd"
-              d="M9 3.5a5.5 5.5 0 1 0 3.36 9.85l3.14 3.15a.75.75 0 1 0 1.06-1.06l-3.15-3.14A5.5 5.5 0 0 0 9 3.5zM5 9a4 4 0 1 1 8 0 4 4 0 0 1-8 0z"
-              clip-rule="evenodd"
-            />
-          </svg>
-          <input
-            type="text"
-            class="grow"
-            placeholder="Поиск по имени или id..."
-            x-model="query"
-          />
-          <kbd class="kbd kbd-sm" x-show="query" x-on:click="query = ''"
-            >×</kbd
-          >
-        </label>
-        <div class="join">
-          <button
-            class="btn join-item btn-sm"
-            :class="filter === 'all' ? 'btn-active' : ''"
-            x-on:click="filter = 'all'"
-          >
-            Все
-          </button>
-          <button
-            class="btn join-item btn-sm"
-            :class="filter === 'visible' ? 'btn-active' : ''"
-            x-on:click="filter = 'visible'"
-          >
-            Видимые
-          </button>
-          <button
-            class="btn join-item btn-sm"
-            :class="filter === 'hidden' ? 'btn-active' : ''"
-            x-on:click="filter = 'hidden'"
-          >
-            Скрытые
-          </button>
-        </div>
-      </section>
-
-      <section
-        class="rounded-xl border border-base-300/60 bg-base-100/40 p-3 shadow-sm backdrop-blur"
-      >
-        <template x-if="loading">
-          <div class="flex justify-center py-20">
-            <span class="loading loading-spinner loading-lg text-primary"></span>
-          </div>
-        </template>
-        <template x-if="!loading && filtered.length === 0">
-          <div class="py-16 text-center opacity-60">
-            <p class="text-lg">Ничего не найдено</p>
-            <p class="mt-1 text-sm">Попробуй другой запрос или фильтр</p>
-          </div>
-        </template>
-        <div
-          x-show="!loading && filtered.length > 0"
-          class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+      <div role="tablist" class="tabs tabs-boxed mb-5 self-start">
+        <button
+          role="tab"
+          class="tab"
+          :class="tab === 'apps' ? 'tab-active' : ''"
+          x-on:click="tab = 'apps'"
         >
-          <template x-for="app in filtered" :key="app.id">
-            <div
-              class="app-card flex items-center gap-3 rounded-lg border border-base-300/60 bg-base-100 p-3 shadow-sm"
-              :class="app.hidden ? 'is-hidden' : ''"
-            >
-              <template x-if="app.has_icon">
-                <img
-                  class="icon-img"
-                  :src="'/api/apps/' + encodeURIComponent(app.id) + '/icon?size=96'"
-                  :alt="app.name"
-                  loading="lazy"
-                  x-on:error="app.has_icon = false"
-                />
-              </template>
-              <template x-if="!app.has_icon">
-                <div class="icon-fallback" x-text="initial(app.name)"></div>
-              </template>
-              <div class="min-w-0 flex-1">
-                <div class="truncate text-base font-semibold" x-text="app.name"></div>
-                <div
-                  class="truncate text-xs opacity-60"
-                  x-text="app.id"
-                ></div>
-                <template x-if="app.comment">
-                  <div
-                    class="mt-0.5 truncate text-xs opacity-50"
-                    x-text="app.comment"
-                  ></div>
-                </template>
-              </div>
-              <label class="swap swap-flip cursor-pointer" :title="app.hidden ? 'Показать' : 'Скрыть'">
-                <input
-                  type="checkbox"
-                  :checked="!app.hidden"
-                  x-on:change="toggle(app)"
-                />
-                <div class="swap-on text-success">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-7 w-7">
-                    <path d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/>
-                  </svg>
-                </div>
-                <div class="swap-off opacity-60">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-7 w-7">
-                    <path d="M2.27 3.72 3.68 2.3 21.7 20.32l-1.41 1.41-3.1-3.1A12.7 12.7 0 0 1 12 19c-7 0-10-7-10-7a17 17 0 0 1 4.22-5.36L2.27 3.72zM12 7c-.37 0-.72.04-1.07.11l7 7c.07-.35.11-.7.11-1.07a6 6 0 0 0-6-6zm0-2c7 0 10 7 10 7a16.47 16.47 0 0 1-3.1 4.3l-1.43-1.43A14.6 14.6 0 0 0 19.67 12C18.93 10.74 16.4 7 12 7l-1.5.08-1.6-1.6C9.52 5.17 10.73 5 12 5z"/>
-                  </svg>
-                </div>
-              </label>
+          Приложения
+        </button>
+        <button
+          role="tab"
+          class="tab"
+          :class="tab === 'shortcuts' ? 'tab-active' : ''"
+          x-on:click="tab = 'shortcuts'"
+        >
+          Ярлыки
+          <span class="badge badge-sm ml-2" x-text="shortcuts.length"></span>
+        </button>
+      </div>
+
+      <!-- APPS TAB -->
+      <section x-show="tab === 'apps'">
+        <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <label class="input input-bordered flex flex-1 items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 opacity-60">
+              <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.36 9.85l3.14 3.15a.75.75 0 1 0 1.06-1.06l-3.15-3.14A5.5 5.5 0 0 0 9 3.5zM5 9a4 4 0 1 1 8 0 4 4 0 0 1-8 0z" clip-rule="evenodd"/>
+            </svg>
+            <input type="text" class="grow" placeholder="Поиск по имени или id..." x-model="query" />
+            <kbd class="kbd kbd-sm" x-show="query" x-on:click="query = ''">×</kbd>
+          </label>
+          <div class="join">
+            <button class="btn join-item btn-sm" :class="filter === 'all' ? 'btn-active' : ''" x-on:click="filter = 'all'">Все</button>
+            <button class="btn join-item btn-sm" :class="filter === 'visible' ? 'btn-active' : ''" x-on:click="filter = 'visible'">Видимые</button>
+            <button class="btn join-item btn-sm" :class="filter === 'hidden' ? 'btn-active' : ''" x-on:click="filter = 'hidden'">Скрытые</button>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-base-300/60 bg-base-100/40 p-3 shadow-sm backdrop-blur">
+          <template x-if="loading">
+            <div class="flex justify-center py-20">
+              <span class="loading loading-spinner loading-lg text-primary"></span>
             </div>
           </template>
+          <template x-if="!loading && filteredApps.length === 0">
+            <div class="py-16 text-center opacity-60">
+              <p class="text-lg">Ничего не найдено</p>
+              <p class="mt-1 text-sm">Попробуй другой запрос или фильтр</p>
+            </div>
+          </template>
+          <div
+            x-show="!loading && filteredApps.length > 0"
+            class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+          >
+            <template x-for="app in filteredApps" :key="app.id">
+              <div
+                class="app-card flex items-center gap-3 rounded-lg border border-base-300/60 bg-base-100 p-3 shadow-sm"
+                :class="app.hidden ? 'is-hidden' : ''"
+              >
+                <template x-if="app.has_icon">
+                  <img
+                    class="icon-img"
+                    :src="'/api/apps/' + encodeURIComponent(app.id) + '/icon?size=96'"
+                    :alt="app.name"
+                    loading="lazy"
+                    x-on:error="app.has_icon = false"
+                  />
+                </template>
+                <template x-if="!app.has_icon">
+                  <div class="icon-fallback" :class="app.shortcut ? 'icon-shortcut' : ''" x-text="shortcutIcon(app)"></div>
+                </template>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2">
+                    <div class="truncate text-base font-semibold" x-text="app.name"></div>
+                    <span x-show="app.shortcut" class="badge badge-xs badge-secondary">ярлык</span>
+                  </div>
+                  <div class="truncate text-xs opacity-60" x-text="app.id"></div>
+                  <template x-if="app.comment">
+                    <div class="mt-0.5 truncate text-xs opacity-50" x-text="app.comment"></div>
+                  </template>
+                </div>
+                <label class="swap swap-flip cursor-pointer" :title="app.hidden ? 'Показать' : 'Скрыть'">
+                  <input type="checkbox" :checked="!app.hidden" x-on:change="toggleVisibility(app)" />
+                  <div class="swap-on text-success">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-7 w-7"><path d="M12 5c-7 0-10 7-10 7s3 7 10 7 10-7 10-7-3-7-10-7zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8z"/></svg>
+                  </div>
+                  <div class="swap-off opacity-60">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-7 w-7"><path d="M2.27 3.72 3.68 2.3 21.7 20.32l-1.41 1.41-3.1-3.1A12.7 12.7 0 0 1 12 19c-7 0-10-7-10-7a17 17 0 0 1 4.22-5.36L2.27 3.72zM12 7c-.37 0-.72.04-1.07.11l7 7c.07-.35.11-.7.11-1.07a6 6 0 0 0-6-6zm0-2c7 0 10 7 10 7a16.47 16.47 0 0 1-3.1 4.3l-1.43-1.43A14.6 14.6 0 0 0 19.67 12C18.93 10.74 16.4 7 12 7l-1.5.08-1.6-1.6C9.52 5.17 10.73 5 12 5z"/></svg>
+                  </div>
+                </label>
+              </div>
+            </template>
+          </div>
         </div>
       </section>
 
-      <div
-        class="toast toast-end toast-bottom"
-        x-show="toast.visible"
-        x-transition
-      >
-        <div
-          class="alert"
-          :class="toast.kind === 'error' ? 'alert-error' : 'alert-success'"
-        >
+      <!-- SHORTCUTS TAB -->
+      <section x-show="tab === 'shortcuts'">
+        <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="text-sm opacity-70">
+            Кастомные ярлыки — команда, которая открывается в терминале с указанной папкой. Удобно для
+            <span class="font-mono">claude</span>, <span class="font-mono">vim</span> и т.п. в конкретных проектах.
+          </div>
+          <button class="btn btn-primary btn-sm" x-on:click="openShortcutForm(null)">
+            + Новый ярлык
+          </button>
+        </div>
+
+        <div class="rounded-xl border border-base-300/60 bg-base-100/40 p-3 shadow-sm backdrop-blur">
+          <template x-if="shortcuts.length === 0">
+            <div class="py-16 text-center opacity-60">
+              <p class="text-lg">Пока нет ярлыков</p>
+              <p class="mt-1 text-sm">Нажми «+ Новый ярлык», чтобы добавить первый</p>
+            </div>
+          </template>
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2" x-show="shortcuts.length > 0">
+            <template x-for="sc in shortcuts" :key="sc.id">
+              <div class="app-card rounded-lg border border-base-300/60 bg-base-100 p-4 shadow-sm">
+                <div class="flex items-start gap-3">
+                  <div class="icon-fallback icon-shortcut" x-text="sc.icon || shortcutIcon({shortcut: true, name: sc.name})"></div>
+                  <div class="min-w-0 flex-1">
+                    <div class="text-base font-semibold" x-text="sc.name"></div>
+                    <div class="truncate font-mono text-xs opacity-70" x-text="sc.command"></div>
+                    <div class="truncate text-xs opacity-50" x-show="sc.cwd">
+                      <span class="opacity-60">папка:</span>
+                      <span x-text="sc.cwd"></span>
+                    </div>
+                    <div class="truncate text-xs opacity-50">
+                      <span class="opacity-60">терминал:</span>
+                      <span x-text="sc.terminal || ('(по умолчанию: ' + (defaultTerminal || 'авто') + ')')"></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-3 flex justify-end gap-2">
+                  <button class="btn btn-ghost btn-sm" x-on:click="openShortcutForm(sc)">Редактировать</button>
+                  <button class="btn btn-ghost btn-sm text-error" x-on:click="deleteShortcut(sc)">Удалить</button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- FORM MODAL -->
+        <dialog class="modal" :class="formOpen ? 'modal-open' : ''" x-show="formOpen">
+          <div class="modal-box max-w-lg">
+            <h3 class="text-lg font-bold" x-text="formEditing ? 'Редактировать ярлык' : 'Новый ярлык'"></h3>
+            <div class="mt-4 space-y-3">
+              <label class="form-control">
+                <div class="label">
+                  <span class="label-text">ID <span class="opacity-50">(только латиница, без пробелов)</span></span>
+                </div>
+                <input
+                  class="input input-bordered"
+                  x-model="form.id"
+                  :disabled="formEditing"
+                  placeholder="claude-myproj"
+                />
+              </label>
+              <label class="form-control">
+                <div class="label">
+                  <span class="label-text">Название</span>
+                </div>
+                <input class="input input-bordered" x-model="form.name" placeholder="Claude: MyProj" />
+              </label>
+              <label class="form-control">
+                <div class="label">
+                  <span class="label-text">Команда</span>
+                </div>
+                <input class="input input-bordered font-mono" x-model="form.command" placeholder="claude" />
+              </label>
+              <label class="form-control">
+                <div class="label">
+                  <span class="label-text">Рабочая папка <span class="opacity-50">(опционально)</span></span>
+                </div>
+                <input class="input input-bordered font-mono" x-model="form.cwd" placeholder="/home/sasha/WORK/MyProj" />
+              </label>
+              <label class="form-control">
+                <div class="label">
+                  <span class="label-text">Терминал</span>
+                </div>
+                <select class="select select-bordered" x-model="form.terminal">
+                  <option value="">(по умолчанию: <span x-text="defaultTerminal || 'авто'"></span>)</option>
+                  <template x-for="t in supportedTerminals" :key="t">
+                    <option :value="t" x-text="t"></option>
+                  </template>
+                </select>
+              </label>
+              <label class="form-control">
+                <div class="label">
+                  <span class="label-text">Иконка <span class="opacity-50">(эмодзи или буква, по умолчанию — первая буква названия)</span></span>
+                </div>
+                <input class="input input-bordered" x-model="form.icon" placeholder="🤖" maxlength="4" />
+              </label>
+            </div>
+
+            <div class="modal-action">
+              <button class="btn btn-ghost" x-on:click="closeShortcutForm()">Отмена</button>
+              <button class="btn btn-primary" x-on:click="saveShortcut()" :disabled="!canSaveShortcut">Сохранить</button>
+            </div>
+          </div>
+          <form method="dialog" class="modal-backdrop"><button x-on:click="closeShortcutForm()">close</button></form>
+        </dialog>
+      </section>
+
+      <!-- TOAST -->
+      <div class="toast toast-end toast-bottom" x-show="toast.visible" x-transition>
+        <div class="alert" :class="toast.kind === 'error' ? 'alert-error' : 'alert-success'">
           <span x-text="toast.text"></span>
         </div>
       </div>
@@ -238,13 +318,20 @@
       function adminApp() {
         return {
           apps: [],
+          shortcuts: [],
+          supportedTerminals: [],
+          defaultTerminal: "",
           loading: true,
           query: "",
           filter: "all",
+          tab: "apps",
           toast: { visible: false, text: "", kind: "success" },
           toastTimer: null,
+          formOpen: false,
+          formEditing: false,
+          form: { id: "", name: "", command: "", cwd: "", terminal: "", icon: "" },
 
-          get filtered() {
+          get filteredApps() {
             const q = this.query.trim().toLowerCase();
             return this.apps.filter((a) => {
               if (this.filter === "visible" && a.hidden) return false;
@@ -257,34 +344,51 @@
               );
             });
           },
-
           get visibleCount() {
             return this.apps.filter((a) => !a.hidden).length;
           },
           get hiddenCount() {
             return this.apps.filter((a) => a.hidden).length;
           },
+          get canSaveShortcut() {
+            return (
+              this.form.id.trim() &&
+              this.form.name.trim() &&
+              this.form.command.trim() &&
+              /^[A-Za-z0-9_.-]+$/.test(this.form.id.trim())
+            );
+          },
 
-          initial(name) {
-            return (name || "?").trim().charAt(0).toUpperCase();
+          shortcutIcon(app) {
+            if (app.shortcut) return "⚡";
+            return (app.name || "?").trim().charAt(0).toUpperCase();
           },
 
           async load() {
             this.loading = true;
             try {
-              const res = await fetch("/api/apps");
-              if (!res.ok) throw new Error("status " + res.status);
-              const list = await res.json();
-              this.apps = list.map((a) => ({ ...a, has_icon: !!a.has_icon }));
+              const [appsRes, scRes] = await Promise.all([
+                fetch("/api/apps"),
+                fetch("/api/shortcuts"),
+              ]);
+              if (!appsRes.ok) throw new Error("apps " + appsRes.status);
+              if (!scRes.ok) throw new Error("shortcuts " + scRes.status);
+              const appsList = await appsRes.json();
+              const scData = await scRes.json();
+              this.apps = appsList.map((a) => ({ ...a, has_icon: !!a.has_icon }));
+              this.shortcuts = scData.shortcuts || [];
+              this.supportedTerminals = scData.supported_terminals || [];
+              this.defaultTerminal = scData.default_terminal || "";
             } catch (e) {
-              this.showToast("Не удалось загрузить список: " + e.message, "error");
+              this.showToast("Не удалось загрузить: " + e.message, "error");
               this.apps = [];
+              this.shortcuts = [];
             } finally {
               this.loading = false;
             }
           },
 
-          async toggle(app) {
+          async toggleVisibility(app) {
             app.hidden = !app.hidden;
             const hidden = this.apps.filter((a) => a.hidden).map((a) => a.id);
             try {
@@ -300,6 +404,77 @@
               );
             } catch (e) {
               app.hidden = !app.hidden;
+              this.showToast("Не сохранилось: " + e.message, "error");
+            }
+          },
+
+          openShortcutForm(sc) {
+            if (sc) {
+              this.formEditing = true;
+              this.form = {
+                id: sc.id,
+                name: sc.name,
+                command: sc.command,
+                cwd: sc.cwd || "",
+                terminal: sc.terminal || "",
+                icon: sc.icon || "",
+              };
+            } else {
+              this.formEditing = false;
+              this.form = { id: "", name: "", command: "", cwd: "", terminal: "", icon: "" };
+            }
+            this.formOpen = true;
+          },
+
+          closeShortcutForm() {
+            this.formOpen = false;
+          },
+
+          async saveShortcut() {
+            const trimmed = {
+              id: this.form.id.trim(),
+              name: this.form.name.trim(),
+              command: this.form.command.trim(),
+              cwd: this.form.cwd.trim(),
+              terminal: this.form.terminal.trim(),
+              icon: this.form.icon.trim(),
+            };
+            let next;
+            if (this.formEditing) {
+              next = this.shortcuts.map((s) => (s.id === trimmed.id ? trimmed : s));
+            } else {
+              if (this.shortcuts.some((s) => s.id === trimmed.id)) {
+                this.showToast(`Ярлык с id "${trimmed.id}" уже есть`, "error");
+                return;
+              }
+              next = [...this.shortcuts, trimmed];
+            }
+            await this.putShortcuts(next, `Сохранено: ${trimmed.name}`);
+            this.formOpen = false;
+          },
+
+          async deleteShortcut(sc) {
+            if (!confirm(`Удалить ярлык "${sc.name}"?`)) return;
+            const next = this.shortcuts.filter((s) => s.id !== sc.id);
+            await this.putShortcuts(next, `Удалено: ${sc.name}`);
+          },
+
+          async putShortcuts(next, successMsg) {
+            try {
+              const res = await fetch("/api/shortcuts", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ shortcuts: next }),
+              });
+              if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.error?.message || ("status " + res.status));
+              }
+              const data = await res.json();
+              this.shortcuts = data.shortcuts || next;
+              await this.load(); // обновить apps tab на случай если ярлык там виден
+              this.showToast(successMsg, "success");
+            } catch (e) {
               this.showToast("Не сохранилось: " + e.message, "error");
             }
           },

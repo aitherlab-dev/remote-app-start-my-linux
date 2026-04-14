@@ -18,6 +18,7 @@ import (
 	"github.com/sasha/remotelauncher/internal/httpapi"
 	"github.com/sasha/remotelauncher/internal/icons"
 	"github.com/sasha/remotelauncher/internal/launcher"
+	"github.com/sasha/remotelauncher/internal/shortcuts"
 	"github.com/sasha/remotelauncher/internal/tlsutil"
 	"github.com/sasha/remotelauncher/internal/visibility"
 	"github.com/sasha/remotelauncher/internal/web"
@@ -110,6 +111,13 @@ func run(args []string) error {
 	}
 	slog.Info("visibility loaded", "hidden", visibilityStore.Count(), "path", visibilityPath)
 
+	shortcutStore := shortcuts.NewStore()
+	shortcutsPath := filepath.Join(certDir, "shortcuts.json")
+	if err := shortcutStore.Load(shortcutsPath); err != nil {
+		return fmt.Errorf("load shortcuts: %w", err)
+	}
+	slog.Info("shortcuts loaded", "count", shortcutStore.Count(), "path", shortcutsPath)
+
 	pinSession, err := auth.NewPINSession(cfg.Auth.PINTTL)
 	if err != nil {
 		return fmt.Errorf("create pin session: %w", err)
@@ -136,18 +144,20 @@ func run(args []string) error {
 	pairLimiter := auth.NewRateLimiter(cfg.Auth.RateLimitPerIP, cfg.Auth.RateLimitGlobal, cfg.Auth.RateLimitWindow)
 
 	handler := httpapi.NewRouter(httpapi.RouterDeps{
-		Version:     Version,
-		StartedAt:   startedAt,
-		Catalog:     cat,
-		Finder:      finder,
-		Launcher:    laun,
-		Alive:       tracker,
-		Visibility:  visibilityStore,
-		Fingerprint: fingerprint,
-		TokenStore:  tokenStore,
-		PINProvider: pinSession,
-		TokenIssuer: storeTokenIssuer{store: tokenStore},
-		RateLimiter: pairLimiter,
+		Version:         Version,
+		StartedAt:       startedAt,
+		Catalog:         cat,
+		Finder:          finder,
+		Launcher:        laun,
+		Alive:           tracker,
+		Visibility:      visibilityStore,
+		Shortcuts:       shortcutStore,
+		DefaultTerminal: cfg.Launcher.DefaultTerminal,
+		Fingerprint:     fingerprint,
+		TokenStore:      tokenStore,
+		PINProvider:     pinSession,
+		TokenIssuer:     storeTokenIssuer{store: tokenStore},
+		RateLimiter:     pairLimiter,
 	})
 
 	srv := &http.Server{
@@ -179,9 +189,11 @@ func run(args []string) error {
 		webSrv = &http.Server{
 			Addr: cfg.Web.ListenAddr,
 			Handler: web.NewHandler(web.Deps{
-				Catalog:    cat,
-				Finder:     finder,
-				Visibility: visibilityStore,
+				Catalog:         cat,
+				Finder:          finder,
+				Visibility:      visibilityStore,
+				Shortcuts:       shortcutStore,
+				DefaultTerminal: cfg.Launcher.DefaultTerminal,
 			}),
 			ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 			ReadTimeout:       cfg.Server.ReadTimeout,

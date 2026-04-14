@@ -14,6 +14,7 @@ import (
 	"github.com/sasha/remotelauncher/internal/catalog"
 	"github.com/sasha/remotelauncher/internal/desktop"
 	"github.com/sasha/remotelauncher/internal/icons"
+	"github.com/sasha/remotelauncher/internal/shortcuts"
 )
 
 // testBearerToken is the plaintext token seeded into every test router
@@ -75,12 +76,33 @@ type fakeLauncher struct {
 	err    error
 	called desktop.Entry
 	calls  int
+
+	// LaunchCommand tracking — separate fields so desktop/shortcut
+	// paths never tread on each other.
+	cmdPID      int
+	cmdErr      error
+	cmdCalled   bool
+	cmdID       string
+	cmdTerminal string
+	cmdDefault  string
+	cmdCwd      string
+	cmdCommand  string
 }
 
 func (f *fakeLauncher) Launch(e desktop.Entry) (int, error) {
 	f.called = e
 	f.calls++
 	return f.pid, f.err
+}
+
+func (f *fakeLauncher) LaunchCommand(id, terminal, defaultTerminal, cwd, command string) (int, error) {
+	f.cmdCalled = true
+	f.cmdID = id
+	f.cmdTerminal = terminal
+	f.cmdDefault = defaultTerminal
+	f.cmdCwd = cwd
+	f.cmdCommand = command
+	return f.cmdPID, f.cmdErr
 }
 
 // fakeAlive is the AliveChecker test double. It reports true for any
@@ -109,6 +131,36 @@ func (f *fakeVisibility) IsHidden(id string) bool {
 	return f.hidden[id]
 }
 
+// fakeShortcutProvider is the ShortcutProvider test double. It
+// serves a fixed list and lookup map so handler tests can exercise
+// the custom: id branch without a real shortcuts.Store.
+type fakeShortcutProvider struct {
+	items map[string]shortcuts.Shortcut
+	order []string
+}
+
+func newFakeShortcutProvider(scs ...shortcuts.Shortcut) *fakeShortcutProvider {
+	p := &fakeShortcutProvider{items: make(map[string]shortcuts.Shortcut, len(scs))}
+	for _, sc := range scs {
+		p.items[sc.ID] = sc
+		p.order = append(p.order, sc.ID)
+	}
+	return p
+}
+
+func (p *fakeShortcutProvider) List() []shortcuts.Shortcut {
+	out := make([]shortcuts.Shortcut, 0, len(p.order))
+	for _, id := range p.order {
+		out = append(out, p.items[id])
+	}
+	return out
+}
+
+func (p *fakeShortcutProvider) Get(id string) (shortcuts.Shortcut, bool) {
+	sc, ok := p.items[id]
+	return sc, ok
+}
+
 // newRouterFor builds a router with sensible test defaults. Pass nil
 // for collaborators that should be left out of the test (the router
 // will still wire them up, but the handler endpoint won't be hit).
@@ -117,6 +169,20 @@ func (f *fakeVisibility) IsHidden(id string) bool {
 // testBearerToken, so tests can hit protected endpoints through
 // authedRequest without having to run the /api/pair flow.
 func newRouterFor(t *testing.T, c *catalog.Catalog, finder *icons.Finder, l AppLauncher, alive AliveChecker) http.Handler {
+	t.Helper()
+	return newRouterForWith(t, c, finder, l, alive, nil)
+}
+
+// newRouterForWith is newRouterFor plus a shortcut provider for the
+// subset of tests that exercise the custom: id branch.
+func newRouterForWith(
+	t *testing.T,
+	c *catalog.Catalog,
+	finder *icons.Finder,
+	l AppLauncher,
+	alive AliveChecker,
+	provider ShortcutProvider,
+) http.Handler {
 	t.Helper()
 	if finder == nil {
 		finder = icons.New([]string{t.TempDir()}, "hicolor")
@@ -136,17 +202,19 @@ func newRouterFor(t *testing.T, c *catalog.Catalog, finder *icons.Finder, l AppL
 		LastSeen:    now,
 	})
 	return NewRouter(RouterDeps{
-		Version:     "dev",
-		StartedAt:   time.Now().Add(-time.Second),
-		Catalog:     c,
-		Finder:      finder,
-		Launcher:    l,
-		Alive:       alive,
-		Fingerprint: testFingerprint,
-		TokenStore:  store,
-		PINProvider: &fakePINProvider{pin: "000000", consumeOK: true},
-		TokenIssuer: &fakeTokenIssuer{token: "unused-token"},
-		RateLimiter: auth.NewRateLimiter(1000, 10_000, 10*time.Minute),
+		Version:         "dev",
+		StartedAt:       time.Now().Add(-time.Second),
+		Catalog:         c,
+		Finder:          finder,
+		Launcher:        l,
+		Alive:           alive,
+		Shortcuts:       provider,
+		DefaultTerminal: "xterm",
+		Fingerprint:     testFingerprint,
+		TokenStore:      store,
+		PINProvider:     &fakePINProvider{pin: "000000", consumeOK: true},
+		TokenIssuer:     &fakeTokenIssuer{token: "unused-token"},
+		RateLimiter:     auth.NewRateLimiter(1000, 10_000, 10*time.Minute),
 	})
 }
 

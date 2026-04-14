@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/sasha/remotelauncher/internal/launcher"
+	"github.com/sasha/remotelauncher/internal/shortcuts"
 )
 
 func TestLaunchHandler_OK(t *testing.T) {
@@ -195,6 +196,96 @@ func TestLaunchHandler_PassesEntryToLauncher(t *testing.T) {
 	}
 	if fl.called.Exec == "" {
 		t.Errorf("fakeLauncher.called.Exec is empty — handler must forward the full desktop.Entry")
+	}
+}
+
+func TestLaunchHandler_Shortcut_OK(t *testing.T) {
+	cat := newTestCatalog(t, nil)
+	fl := &fakeLauncher{cmdPID: 777}
+	provider := newFakeShortcutProvider(shortcuts.Shortcut{
+		ID:       "claude-x",
+		Name:     "Claude X",
+		Command:  "claude",
+		Cwd:      "/home/user/proj",
+		Terminal: "kitty",
+	})
+	r := newRouterForWith(t, cat, nil, fl, nil, provider)
+
+	req := authedRequest(http.MethodPost, "/api/apps/custom:claude-x/launch", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d (body=%s)", w.Code, w.Body.String())
+	}
+	if !fl.cmdCalled {
+		t.Fatal("LaunchCommand was not called")
+	}
+	if fl.cmdID != "custom:claude-x" {
+		t.Errorf("cmdID = %q, want custom:claude-x", fl.cmdID)
+	}
+	if fl.cmdTerminal != "kitty" {
+		t.Errorf("cmdTerminal = %q, want kitty", fl.cmdTerminal)
+	}
+	if fl.cmdDefault != "xterm" {
+		t.Errorf("cmdDefault = %q, want xterm", fl.cmdDefault)
+	}
+	if fl.cmdCwd != "/home/user/proj" {
+		t.Errorf("cmdCwd = %q", fl.cmdCwd)
+	}
+	if fl.cmdCommand != "claude" {
+		t.Errorf("cmdCommand = %q", fl.cmdCommand)
+	}
+	var got launchResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.PID != 777 {
+		t.Errorf("pid = %d, want 777", got.PID)
+	}
+}
+
+func TestLaunchHandler_Shortcut_NotFound(t *testing.T) {
+	cat := newTestCatalog(t, nil)
+	provider := newFakeShortcutProvider()
+	r := newRouterForWith(t, cat, nil, &fakeLauncher{}, nil, provider)
+
+	req := authedRequest(http.MethodPost, "/api/apps/custom:nope/launch", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404 (body=%s)", w.Code, w.Body.String())
+	}
+}
+
+func TestLaunchHandler_Shortcut_ProviderNilReturns404(t *testing.T) {
+	cat := newTestCatalog(t, nil)
+	r := newRouterFor(t, cat, nil, &fakeLauncher{}, nil)
+
+	req := authedRequest(http.MethodPost, "/api/apps/custom:anything/launch", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestLaunchHandler_Shortcut_UnknownTerminal(t *testing.T) {
+	cat := newTestCatalog(t, nil)
+	fl := &fakeLauncher{cmdErr: launcher.ErrUnknownTerminal}
+	provider := newFakeShortcutProvider(shortcuts.Shortcut{
+		ID: "x", Name: "X", Command: "x", Terminal: "nope",
+	})
+	r := newRouterForWith(t, cat, nil, fl, nil, provider)
+
+	req := authedRequest(http.MethodPost, "/api/apps/custom:x/launch", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", w.Code)
 	}
 }
 

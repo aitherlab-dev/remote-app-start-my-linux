@@ -62,7 +62,7 @@ func TestAppsHandler_ReturnsEveryAppWithHiddenFlag(t *testing.T) {
 		t.Fatalf("SetHidden: %v", err)
 	}
 
-	h := NewAppsHandler(cat, store)
+	h := NewAppsHandler(cat, store, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
@@ -99,7 +99,7 @@ func TestAppsHandler_NilStoreNoCrash(t *testing.T) {
 	cat := seedCatalog(t, map[string]string{
 		"alpha.desktop": desktop("Alpha", "alpha", "", ""),
 	})
-	h := NewAppsHandler(cat, nil)
+	h := NewAppsHandler(cat, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/api/apps", nil)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)

@@ -38,7 +38,8 @@ type rawServer struct {
 }
 
 type rawLauncher struct {
-	CleanupPeriod *string `toml:"cleanup_period"`
+	CleanupPeriod   *string `toml:"cleanup_period"`
+	DefaultTerminal *string `toml:"default_terminal"`
 }
 
 type rawAuth struct {
@@ -142,7 +143,13 @@ func (r *rawServer) applyTo(c *ServerConfig) error {
 }
 
 func (r *rawLauncher) applyTo(c *LauncherConfig) error {
-	return setDuration(&c.CleanupPeriod, r.CleanupPeriod, "launcher.cleanup_period")
+	if err := setDuration(&c.CleanupPeriod, r.CleanupPeriod, "launcher.cleanup_period"); err != nil {
+		return err
+	}
+	if r.DefaultTerminal != nil {
+		c.DefaultTerminal = *r.DefaultTerminal
+	}
+	return nil
 }
 
 func (r *rawAuth) applyTo(c *AuthConfig) error {

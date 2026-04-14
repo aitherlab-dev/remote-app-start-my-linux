@@ -6,29 +6,39 @@ import (
 	"net/http"
 
 	"github.com/sasha/remotelauncher/internal/catalog"
+	"github.com/sasha/remotelauncher/internal/shortcuts"
 	"github.com/sasha/remotelauncher/internal/visibility"
 )
 
 // AppDTO is the admin-UI view of a catalog entry. Unlike the
 // phone-facing catalog.AppInfo it deliberately exposes the Hidden
-// flag (so the UI can render the right toggle state) and a HasIcon
+// flag (so the UI can render the right toggle state), a HasIcon
 // boolean the front-end uses to decide whether to request the
-// /api/apps/{id}/icon endpoint at all — apps without an Icon= field
-// in their .desktop file would otherwise produce a 404 on every
-// card load, spamming the browser console.
+// /api/apps/{id}/icon endpoint at all, and a Shortcut flag that
+// lets the UI render user-defined custom entries differently from
+// real .desktop applications.
 type AppDTO struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Comment string `json:"comment,omitempty"`
-	HasIcon bool   `json:"has_icon"`
-	Hidden  bool   `json:"hidden"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Comment  string `json:"comment,omitempty"`
+	HasIcon  bool   `json:"has_icon"`
+	Hidden   bool   `json:"hidden"`
+	Shortcut bool   `json:"shortcut,omitempty"`
 }
 
 // NewAppsHandler returns GET /api/apps for the admin UI. Unlike the
 // main API handler on :8443, this one returns every application
 // regardless of visibility and stamps each entry with its current
 // hidden flag so the UI can render the correct toggle state.
-func NewAppsHandler(cat *catalog.Catalog, store *visibility.Store) http.HandlerFunc {
+//
+// Custom shortcuts are merged into the list with ids prefixed by
+// shortcuts.IDPrefix and Shortcut=true so the UI can render them
+// distinctly without a separate fetch.
+func NewAppsHandler(
+	cat *catalog.Catalog,
+	visStore *visibility.Store,
+	scStore *shortcuts.Store,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		list := cat.List()
 		out := make([]AppDTO, 0, len(list))
@@ -39,10 +49,26 @@ func NewAppsHandler(cat *catalog.Catalog, store *visibility.Store) http.HandlerF
 				Comment: a.Comment,
 				HasIcon: a.Icon != "",
 			}
-			if store != nil {
-				dto.Hidden = store.IsHidden(a.ID)
+			if visStore != nil {
+				dto.Hidden = visStore.IsHidden(a.ID)
 			}
 			out = append(out, dto)
+		}
+		if scStore != nil {
+			for _, sc := range scStore.List() {
+				id := shortcuts.PrefixedID(sc.ID)
+				dto := AppDTO{
+					ID:       id,
+					Name:     sc.Name,
+					Comment:  sc.Command,
+					HasIcon:  false,
+					Shortcut: true,
+				}
+				if visStore != nil {
+					dto.Hidden = visStore.IsHidden(id)
+				}
+				out = append(out, dto)
+			}
 		}
 		writeJSON(w, http.StatusOK, out)
 	}
