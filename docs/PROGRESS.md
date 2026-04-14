@@ -2,107 +2,118 @@
 
 Снимок состояния для новой сессии Claude Code. Перед стартом прочитай:
 1. Этот файл — короткая картина «где мы»
-2. `/home/sasha/.claude/plans/bubbly-greeting-knuth.md` — полный план
+2. `/home/sasha/.claude/plans/bubbly-greeting-knuth.md` — исходный план (секции A0..A6 для MVP)
 3. `docs/ТЗ.md` — исходное техническое задание
 4. `CLAUDE.md` в корне
 
-## Текущее состояние: Фаза 5 завершена — сервер MVP-готов
+## Текущее состояние — MVP работает + post-MVP фаза B идёт
 
-26 коммитов в `main`. Последний feat-коммит: `c99908f feat(build): README, ldflags version, final green run`.
+Конвейер работает end-to-end на реальном железе: Samsung Galaxy `RFCY818A5MT` → HTTPS на ПК по `192.168.1.248:8443` → сетка приложений → тап → kitty/приложение стартует на Linux. Сервер крутится в systemd user-unit, автозапуск включён, Linger=yes (работает даже без логина).
 
-**Сервер полностью функциональный, защищённый и упакованный**. Ставится на машину одной командой `make install`: бинарь уезжает в `~/.local/bin/`, systemd user-unit в `~/.config/systemd/user/`, сервис поднимается через `enable --now`. Можно раздавать как MVP.
+## Что уже сделано
 
-### Что сервер умеет прямо сейчас
+### Фаза MVP (commit до 7be9dd1)
 
-- HTTPS на `:8443` (ECDSA P-256, self-signed, срок 10 лет)
-- Сертификат живёт в `$XDG_CONFIG_HOME/remotelauncher/cert.pem` + `key.pem`
-- Парсит все `.desktop` файлы (XDG-aware: user перекрывает system)
-- Отдаёт список приложений и иконки с поддержкой наследования тем и KDE-layout
-- Запускает программы через `POST /api/apps/{id}/launch` с отсоединением от сервера
-- Reaps zombie процессы, `running` в `/api/apps` корректно отражает статус
-- PIN-pairing при старте (stdout + log), одноразовый, TTL 10 мин
-- Bearer tokens 32 байта base64url, хранится только SHA-256 hash
-- Токены персистятся в `tokens.json`, живут между перезапусками
-- Rate limit на `/api/pair`: 5 попыток на IP / 20 глобально / 10 минут, 429 + Retry-After
-- `/api/status` возвращает `cert_fingerprint` для TLS-pinning на клиенте
+- **Сервер (Go)** — фазы 1–5: парсинг `.desktop`, иконки, запуск, TLS+SPKI, pairing+токены, rate-limit, TOML конфиг, systemd
+- **Android (Kotlin, Compose)** — фазы A0–A5: Connect / Pairing / Apps экраны, Ktor 3, Coil 3, DataStore, EncryptedSharedPreferences, SPKI-pinning через `PinnedTrustManager`+`PinHolder`, TOFU диалог
 
-### Реальный e2e проверен
+### Фаза B — post-MVP расширения
 
-Сервер реально запускает Chromium через `curl -X POST https://localhost:8443/api/apps/chromium/launch`, `running` переключается на `true`, после закрытия — обратно `false`.
+- **B1 (commit `ecdea75`)** — веб-админка + фильтрация видимости
+  - Второй HTTP-сервер на `127.0.0.1:17843` (loopback, plain HTTP)
+  - Встроенная в бинарь через `embed.FS` веб-морда на Tailwind + daisyUI + Alpine.js (через CDN)
+  - `visibility.json` рядом с `tokens.json` — список скрытых app.id
+  - `/api/apps` на :8443 фильтрует скрытые — телефон их не видит
+  - Блок `[web]` в config.toml, валидация refuse не-loopback адреса
+  - Coverage: visibility 83.7%, web 87.2%
 
-## Структура коммитов по фазам
+- **B2 (commit `10a044d`)** — переверстка Android: читаемая тема, названия под иконками, pair error handling
+  - Своя light/dark палитра вместо дефолтного Purple template
+  - `RemoteLauncherTheme` **принудительно light** (darkTheme = false) потому что активити в манифесте забит на `Theme.Material.Light.NoActionBar`, а `isSystemInDarkTheme()` брал системную тёмную → белый текст на белом фоне. Сейчас фиксировано light, выглядит хорошо
+  - `Surface` обёртка поверх `AppNavHost` чтобы Compose-фон закрывал активити темой
+  - `highContrastFieldColors()` + `fieldTextStyle()` в `ui/theme/Fields.kt` — в OutlinedTextField текст прибит к `onBackground` через `MaterialTheme.colorScheme`, плюс явный sp/weight
+  - `AppsScreen`: убран `aspectRatio(1f)`, minSize сетки 104dp, иконка 56dp, `labelMedium` для названия с `minLines=2` — длинные имена видны
+  - `HttpClientFactory`: `expectSuccess = true` — сервер, вернувший 401 при протухшем PIN, больше не парсится как PairResponse, UI показывает «Неверный PIN»
 
-### Фаза 0 — Инфра
-- `50f4835 chore: initial server scaffolding` (S0.1)
-- `0f4fe44 docs: add project brief and Claude Code guidance`
-- `805386f chore: add lint and coverage tooling` (S0.2)
-
-### Фаза 1 — Ядро сервера
-- `11e418d feat(desktop): parse single .desktop entry file` (S1.1)
-- `830c26c feat(desktop): parse Exec field with quoting and placeholders` (S1.2)
-- `e253332 feat(desktop): scan XDG .desktop directories with user-over-system priority` (S1.3)
-- `5db1cfa feat(catalog): in-memory application catalog with safe reload` (S1.4)
-- `be17cee feat(httpapi): /api/status and /api/apps with graceful shutdown` (S1.5)
-
-### Фаза 2 — Иконки
-- `18592cc feat(icons): XDG icon lookup by name with size and theme fallback` (S2.1)
-- `c9dd43b feat(httpapi): GET /api/apps/{id}/icon with size and theme fallback` (S2.2)
-- `b051f23 feat(icons): theme inheritance and KDE-style size dirs` (S2.3)
-
-### Фаза 3 — Запуск
-- `2d83db2 feat(launcher): start applications detached from the server` (S3.1)
-- `3b936f1 feat(launcher): track running PIDs per application` (S3.2)
-- `aac2e8f feat(httpapi): POST /api/apps/{id}/launch + running status` (S3.3)
-- `41afefc fix(launcher): reap child processes to clear stale running status` (S3.4)
-
-### Фаза 4 — Безопасность
-- `159c0ab feat(tls): self-signed ECDSA cert and HTTPS on :8443` (S4.1)
-- `537d044 feat(auth): PIN pairing + in-memory Bearer tokens on protected routes` (S4.2a)
-- `d439a00 feat(auth): persist tokens to tokens.json` (S4.2b)
-- `131b673 feat(auth): rate limit /api/pair against brute force` (S4.3)
-
-### Фаза 5 — Упаковка
-- `393f2d7 feat(config): TOML config with defaults→file→env→flags precedence` (S5.1)
-- `8c1a425 feat(log): slog level and format from config` (S5.2)
-- `b2028e2 feat(packaging): systemd user unit and make install/uninstall/package` (S5.3)
-- `c99908f feat(build): README, ldflags version, final green run` (S5.4)
-
-### Финальные цифры сервера
-
-- Покрытие ядра: catalog 100%, desktop 91.9%, icons 94.0%, launcher 98.2%
-- Покрытие API/auth: httpapi 90.4%, auth 88.0%
-- Config/tls: config 92.0%, tlsutil 86.4%
-- Суммарно: 87.2% statements
-- Бинарь: 10.3 MiB, одна внешняя зависимость (`BurntSushi/toml`)
-- `version` в `/api/status` вшивается через `-ldflags -X main.Version=$(git describe)`
+- **B3 (commit `25977d2`)** — кастомные ярлыки с CRUD в веб-админке
+  - Новый пакет `internal/shortcuts` — хранилище `shortcuts.json` рядом с `tokens.json`/`visibility.json`, атомарный persist (tmp+rename), валидация
+  - Поля ярлыка: `id` (латиница, без пробелов), `name`, `command`, `cwd`, `terminal`, `icon`
+  - `launcher.LaunchCommand` — запуск произвольной команды в выбранном эмуляторе (`kitty`, `ghostty`, `gnome-terminal`, `konsole`, `alacritty`, `foot`, `xfce4-terminal`, `xterm`)
+  - POSIX single-quote escape для cwd, payload оборачивается в `sh -c "cd '<cwd>' && exec <command>"`
+  - `[launcher] default_terminal` в config.toml — fallback если в ярлыке terminal не задан
+  - `/api/apps` на :8443 сливает `catalog.List()` с shortcuts, id ярлыков идут с префиксом `custom:`
+  - `/api/apps/{id}/launch` — если id начинается с `custom:`, ищет в shortcuts и дёргает `LaunchCommand`
+  - Веб-морда: вкладка «Ярлыки» рядом с «Приложениями», форма CRUD, GET/PUT `/api/shortcuts`
+  - На Android ничего не трогал — ярлыки приходят в общий `/api/apps`, клиент их не отличает от обычных приложений
+  - Coverage: shortcuts 82.2%, launcher 91.6%, httpapi 90.8%
 
 ## Что осталось
 
-### Фаза A — Android-клиент
+### B4 — Zero-config удалённый доступ (следующий этап)
 
-Это отдельный большой блок, начинать с установки JDK/Android Studio/SDK. Полная декомпозиция — в плане, раздел «A0…A6».
+**Цель:** подключаться с телефона с GSM/4G (не из локалки) **без** ручных действий на роутере и **без** Tailscale/Cloudflare/других внешних приложений. Всё внутри бинаря + APK.
+
+**Как:**
+1. **UPnP / NAT-PMP / PCP** в бинаре — сервер находит роутер через SSDP, просит открыть внешний порт 8443 → внутренний 8443, держит lease актуальным. Лира: `github.com/huin/goupnp` или `github.com/jackpal/go-nat-pmp` (или обе как fallback). Плюс узнать внешний IP через тот же UPnP.
+2. **Встроенный DDNS-клиент** — простой HTTP-запрос на API DuckDNS/No-IP/FreeDNS раз в несколько минут. Блок `[ddns]` в `config.toml`: провайдер, токен, домен. Сервер генерирует строку типа «твой адрес: `myname.duckdns.org:8443`».
+3. **UI в админке** — показать внешний адрес + QR-код для удобства ввода на телефоне. Секция «Удалённый доступ» с индикатором «UPnP работает / нет», текущим внешним IP, DDNS-именем.
+4. **Graceful fallback** — если UPnP отключён в роутере, показывать сообщение «UPnP недоступен, либо включи его в роутере, либо дай серверу прямой внешний IP». Никакого ручного port-forwarding как основного пути.
+
+**Важно, что пользователь прямо сказал:**
+- «**ничего ставить дополнительно**» — не Tailscale, не Cloudflare Tunnel, не ddclient
+- «**в роутер руками не лезть**» — UPnP обязательный
+- VPN-клиенты на ПК влияют на curl'овский внешний IP (видно 146.103.121.77 от VPN-провайдера, не реальный), надо проверять внешний адрес через UPnP API роутера, а не через сторонние сервисы
+
+Новая сессия начинает с:
+1. Прочитать `project_priorities.md` в memory
+2. Создать `internal/nat` и `internal/ddns` пакеты
+3. Интегрировать в `main.go` + веб-морду
+4. Протестировать на реальном роутере пользователя
+
+### A6.1 — Release APK с подписью (в самом конце)
+
+Только когда весь функционал закрыт. Раньше **не делать** — пользователь прямо послал меня на хер, когда я зациклился на релизе. Это финальная упаковка, ничего функционального не добавляет.
+
+- release keystore через `keytool` в `~/keys/` (вне репо)
+- пароли в `~/.gradle/gradle.properties`
+- `signingConfigs.release` в `build.gradle.kts`
+- `minifyEnabled=true`, `shrinkResources=true`
+- ProGuard keep-правила для `kotlinx.serialization`
+- ProGuard-smoke instrumented-test с реальным JSON-парсом
+- `apksigner verify --verbose` → v2+v3
+- README с инструкцией установки + fingerprint ключа
+- Бэкап keystore (потеря = невозможность выпускать обновления)
 
 ## Важные факты для новой сессии
 
 - **Репо**: `/home/sasha/WORK/REMOTE-MY-LINUX/`
-- **Go-код**: `server/`, `go.mod` имя `github.com/sasha/remotelauncher`, Go 1.26.1
-- **git user**: локально `Sasha Aither <ceo@aitherlab.org>` (не трогать глобальный config)
-- **Линтеры**: `golangci-lint`, `gofumpt`, `goimports` через `go install`
-- **Тесты**: `make test`, `go test -race`, покрытие ядра ≥85%, HTTP/auth ≥80%
-- **Интеграционный тест**: `make integration` за билд-тегом, парсит PIN из stdout, проходит pair flow, реально поднимает сервер
-- **Manual-тесты**: `make scan-debug` (реальные .desktop), `make icons-debug` (реальные иконки) — за билд-тегом `manual`
-- **Реальная проверка**: `XDG_CONFIG_HOME=/tmp/rl-test ./bin/remotelauncher` + curl через HTTPS с `-k`
-- **Пользователь не программист** — объяснять в терминах «что сервер умеет», не листингами кода
-- **Commits в Conventional Commits** с обязательным `Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>` trailer
-- **Команды агентов через TeamCreate**, не через Agent — это требование из глобальных инструкций пользователя
+- **Go-код**: `server/`, Go 1.26.1
+- **Android-код**: `android/`, Kotlin 2.x, Compose, minSdk 26, targetSdk 35
+- **git user**: локально `Sasha Aither <ceo@aitherlab.org>`
+- **Линт**: `make lint` (golangci-lint + gofumpt + goimports)
+- **Тесты сервера**: `make test` или `make cover`
+- **Интеграционный тест сервера**: `make integration` — **требует свободного порта 8443**, т.е. перед запуском надо `systemctl --user stop remotelauncher`
+- **Тесты Android**: `./gradlew :app:testDebugUnitTest`
+- **Реальная установка**: `make install` → systemd user-unit поднимается автоматически, `make uninstall` для сноса
+- **Linger=yes** уже включён — сервис стартует с загрузкой системы, до логина
 
-## Как стартовать новую сессию над Android-клиентом
+## Про рабочий процесс
+
+- **НЕ использовать `TeamCreate`** — пользователь раздражается, считает слишком медленным. Работать напрямую в основной сессии. См. `feedback_team_create_overhead.md` в memory.
+- **Порядок задач**: UPnP+DDNS (B4) → релиз-APK (A6.1). Ничего не переставлять, релиз в самом конце. См. `project_priorities.md` в memory.
+- **Никакого Tailscale/Cloudflare Tunnel/ddclient** — пользователь хочет self-contained в бинаре и APK.
+- **Пользователь не программист** — объяснять на уровне «что теперь умеет», не листингами кода. Общение на русском, неформальное.
+- **Коммиты** в Conventional Commits с обязательным trailer'ом `Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>`.
+- **Не пушить в remote** без явного разрешения.
+
+## Как стартовать новую сессию над B4 (UPnP + DDNS)
 
 ```
-/init   # уже запускался, CLAUDE.md есть
-# прочитать docs/PROGRESS.md, /home/sasha/.claude/plans/bubbly-greeting-knuth.md
-# первый шаг — A0.1: установить JDK, Android Studio, SDK Platform 35,
-# настроить ANDROID_HOME и PATH, подключить телефон с USB-debug
+# Прочитать в таком порядке:
+# 1. /home/sasha/WORK/REMOTE-MY-LINUX/CLAUDE.md
+# 2. /home/sasha/WORK/REMOTE-MY-LINUX/docs/PROGRESS.md (этот файл)
+# 3. ~/.claude/projects/-home-sasha-WORK-REMOTE-MY-LINUX/memory/MEMORY.md
+# 4. /home/sasha/.claude/plans/bubbly-greeting-knuth.md — разделы про безопасность и remote access
 ```
 
-Сервер — закрытая история на уровне MVP. Следующая длинная секция — Android: установка инструментов, скелет проекта, Connect/Pairing/Apps/Launch/HTTPS/Release. Полная декомпозиция — в плане, раздел «A0…A6».
+Первый шаг: выбрать UPnP-либу (`huin/goupnp` vs `jackpal/go-nat-pmp`), прототип `internal/nat/discover.go` который ищет IGD на локалке и получает внешний IP.
