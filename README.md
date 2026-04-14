@@ -1,52 +1,57 @@
 # RemoteLauncher
 
-Запуск программ на Linux-десктопе с Android-смартфона через локальную сеть.
-Не VNC и не remote desktop: на телефоне видишь сетку приложений с иконками,
-нажимаешь — программа стартует у тебя на ПК.
+Launch programs on your Linux desktop by tapping app icons on your Android
+phone. Not VNC, not remote desktop: you see a grid of app icons on the
+phone, you tap one, and the app starts on the PC.
 
-Состоит из двух частей:
+Two parts:
 
-- **Сервер** (Go, Linux) — один бинарник без зависимостей. Парсит `.desktop`
-  файлы, отдаёт REST, запускает процессы. HTTPS обязателен, pairing через
-  PIN, TLS-пиннинг по SPKI.
-- **Клиент** (Kotlin, Compose) — Android-приложение. Material 3, подключение
-  по адресу и порту, хранит токен в `EncryptedSharedPreferences`.
+- **Server** (Go, Linux) — single static binary, no dependencies. Parses
+  `.desktop` files, exposes a small REST API over HTTPS, launches
+  processes. Mandatory TLS, PIN-based pairing, SPKI certificate pinning on
+  the client.
+- **Client** (Kotlin, Jetpack Compose) — Android app. Material 3,
+  connects by address and port, stores the bearer token in
+  `EncryptedSharedPreferences`.
 
-Текущий релиз работает **только в локальной сети**. План на удалённый
-доступ через платный VPS-туннель лежит в
+The current release works **on local networks only**. Plans for remote
+access over a paid VPS tunnel are captured in
 [`docs/FUTURE-REMOTE-ACCESS.md`](docs/FUTURE-REMOTE-ACCESS.md).
 
-## Установка сервера
+## Install the server
 
 ```sh
 cd server
 make install
 ```
 
-Команда собирает бинарник, ставит его в `~/.local/bin/`, разворачивает
-systemd user-unit и включает автостарт. Подробности — в
+This builds the binary, installs it into `~/.local/bin/`, deploys a
+systemd user unit and enables autostart. More details in
 [`server/README.md`](server/README.md).
 
-После запуска сервер показывает в логах **pairing PIN** (действителен 10
-минут). Его надо ввести на телефоне при первом подключении.
+On the first start the server prints a **pairing PIN** (valid for 10
+minutes). You need to enter it on the phone when you connect for the
+first time.
 
 ```sh
 journalctl --user -u remotelauncher -f
 ```
 
-## Установка Android-клиента
+## Install the Android client
 
-1. Скачай `app-release.apk` из последнего
+1. Grab `app-release.apk` from the latest
    [GitHub Release](https://github.com/aitherlab-dev/remote-app-start-my-linux/releases).
-2. На телефоне в настройках разреши установку из неизвестных источников для
-   браузера/файл-менеджера, через который открываешь APK.
-3. Установи. При первом запуске — введи адрес сервера (`192.168.1.xxx:8443`
-   либо `твой-хост:8443`), прими TLS-сертификат, введи PIN с сервера.
+2. On the phone, allow installation from unknown sources for the
+   browser/file manager you're opening the APK with.
+3. Install and launch. Enter the server address (`192.168.1.xxx:8443` or
+   `your-host:8443`), trust the TLS certificate fingerprint that appears,
+   enter the PIN shown by the server, and you're in.
 
-### Fingerprint подписывающего ключа
+### Signing key fingerprint
 
-При установке обновлений Android проверяет, что APK подписан тем же ключом,
-что и предыдущая версия. Свериться можно так:
+When you install updates, Android enforces that the new APK is signed
+with the same key as the installed one. You can verify the expected key
+against:
 
 ```
 Signer:  CN=Sasha Aither, O=aitherlab, C=RU
@@ -54,36 +59,39 @@ SHA-256: 7B:55:60:CB:94:23:86:23:59:D0:1E:08:97:41:11:87:3C:9E:9B:89:1D:8D:6E:96
 SHA-1:   5C:55:AC:E6:0A:C6:FB:DD:8B:E4:DE:22:16:60:D5:8A:EA:CB:31:86
 ```
 
-## Безопасность
+## Security
 
-- Весь трафик между сервером и клиентом — HTTPS с ECDSA-сертификатом,
-  генерируется на сервере при первом запуске.
-- Клиент пиннит сервер по **SHA-256 SPKI** при первом подключении (TOFU с
-  подтверждением в диалоге) и отбрасывает другие сертификаты в дальнейшем.
-- Аутентификация: PIN-pairing → Bearer-токен, хэш-SHA-256 хранится на сервере,
-  rate-limiting на `/api/pair`.
+- All traffic between server and client runs over HTTPS using an
+  ECDSA self-signed certificate generated on first server start.
+- The client pins the server by its **SHA-256 SPKI hash** on first
+  connection (TOFU flow with an explicit accept dialog) and refuses
+  any other certificate afterwards.
+- Authentication: PIN pairing exchanges a bearer token; only its SHA-256
+  hash is kept server-side, and `/api/pair` is rate-limited.
 
-## Админка сервера
+## Server admin UI
 
-Веб-админка на `http://127.0.0.1:17843` (только loopback, без авторизации):
-список приложений, выключение видимости ненужных, CRUD ярлыков
-(произвольные команды в kitty/ghostty/...).
+A second HTTP server runs on `http://127.0.0.1:17843` (loopback only, no
+authentication by design): list of parsed apps, toggle visibility for
+unwanted ones, and a CRUD editor for custom shortcuts (arbitrary
+commands executed inside a whitelisted terminal emulator such as kitty,
+ghostty, alacritty, gnome-terminal, ...).
 
-## Структура репо
+## Repository layout
 
 ```
-server/     Go-сервер
-android/    Kotlin Android-клиент
-packaging/  systemd unit + install/uninstall scripts
-docs/       ТЗ, прогресс, план удалённого доступа
+server/     Go server
+android/    Kotlin Android client
+packaging/  systemd user unit + install/uninstall scripts
+docs/       original spec, progress notes, future plans
 ```
 
-## Статус
+## Status
 
-| Компонент | Состояние |
+| Component | State |
 | --- | --- |
-| Сервер (парсинг, TLS, pairing, запуск) | ✅ работает |
-| Android-клиент (pairing, сетка, запуск по тапу) | ✅ работает |
-| Веб-админка + скрытие приложений | ✅ работает |
-| Кастомные ярлыки | ✅ работают |
-| Удалённый доступ через интернет | 🔜 [будущая фаза](docs/FUTURE-REMOTE-ACCESS.md) |
+| Server (parsing, TLS, pairing, launching) | Working |
+| Android client (pairing, grid, tap-to-launch) | Working |
+| Admin UI + app visibility filter | Working |
+| Custom shortcuts | Working |
+| Remote access over the internet | [Future phase](docs/FUTURE-REMOTE-ACCESS.md) |
