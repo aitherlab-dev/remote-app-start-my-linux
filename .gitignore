@@ -22,3 +22,7 @@
 
 # OS
 .DS_Store
+
+# Claude Code workspace — local only, not for public repo
+CLAUDE.md
+.claude/
