@@ -19,13 +19,32 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            val storeFilePath = (project.findProperty("REMOTELAUNCHER_STORE_FILE") as String?)
+            val storePwd = (project.findProperty("REMOTELAUNCHER_STORE_PASSWORD") as String?)
+            val keyAliasProp = (project.findProperty("REMOTELAUNCHER_KEY_ALIAS") as String?)
+            val keyPwd = (project.findProperty("REMOTELAUNCHER_KEY_PASSWORD") as String?)
+            if (storeFilePath != null && storePwd != null && keyAliasProp != null && keyPwd != null) {
+                storeFile = file(storeFilePath)
+                storePassword = storePwd
+                keyAlias = keyAliasProp
+                keyPassword = keyPwd
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
