@@ -9,6 +9,7 @@ import kotlinx.serialization.json.Json
 
 fun createAppHttpClient(): HttpClient {
     return HttpClient(CIO) {
+        expectSuccess = true
         engine {
             https {
                 trustManager = PinnedTrustManager()

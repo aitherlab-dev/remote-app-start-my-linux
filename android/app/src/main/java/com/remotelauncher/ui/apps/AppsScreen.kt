@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -191,9 +191,11 @@ private fun AppsGrid(
     onTap: (AppInfo) -> Unit,
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 96.dp),
+        columns = GridCells.Adaptive(minSize = 104.dp),
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(8.dp),
+        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         items(items = apps, key = { it.id }) { app ->
             AppCard(app = app, serverUrl = serverUrl, authToken = authToken, onTap = onTap)
@@ -223,15 +225,14 @@ private fun AppCard(
 
     Card(
         modifier = Modifier
-            .padding(4.dp)
-            .aspectRatio(1f)
+            .fillMaxWidth()
             .clickable { onTap(app) },
     ) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(8.dp),
-            verticalArrangement = Arrangement.Center,
+                .fillMaxWidth()
+                .padding(vertical = 12.dp, horizontal = 8.dp),
+            verticalArrangement = Arrangement.Top,
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             AsyncImage(
@@ -240,16 +241,18 @@ private fun AppCard(
                 placeholder = placeholder,
                 error = placeholder,
                 modifier = Modifier
-                    .size(64.dp)
-                    .clip(RoundedCornerShape(8.dp)),
+                    .size(56.dp)
+                    .clip(RoundedCornerShape(12.dp)),
             )
             Spacer(Modifier.height(8.dp))
             Text(
                 text = app.name,
                 maxLines = 2,
+                minLines = 2,
                 overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelMedium,
                 textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     }

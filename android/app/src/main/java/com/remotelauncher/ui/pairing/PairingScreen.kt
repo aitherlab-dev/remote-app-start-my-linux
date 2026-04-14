@@ -22,10 +22,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.remotelauncher.R
+import com.remotelauncher.ui.theme.fieldTextStyle
+import com.remotelauncher.ui.theme.highContrastFieldColors
 
 @Composable
 fun PairingScreen(
@@ -73,6 +77,12 @@ fun PairingScreen(
             singleLine = true,
             enabled = !isSending,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            textStyle = fieldTextStyle(
+                size = 22.sp,
+                weight = FontWeight.SemiBold,
+                letterSpacing = 4.sp,
+            ),
+            colors = highContrastFieldColors(),
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(16.dp))

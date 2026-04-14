@@ -5,6 +5,10 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Modifier
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.network.ktor3.KtorNetworkFetcherFactory
@@ -55,12 +59,17 @@ class MainActivity : ComponentActivity() {
         val deviceLabel = "${Build.MANUFACTURER} ${Build.MODEL}"
         setContent {
             RemoteLauncherTheme {
-                AppNavHost(
-                    settingsRepository = repository,
-                    apiFactory = apiFactory,
-                    tokenStore = tokenStore,
-                    deviceLabel = deviceLabel,
-                )
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background,
+                ) {
+                    AppNavHost(
+                        settingsRepository = repository,
+                        apiFactory = apiFactory,
+                        tokenStore = tokenStore,
+                        deviceLabel = deviceLabel,
+                    )
+                }
             }
         }
     }
