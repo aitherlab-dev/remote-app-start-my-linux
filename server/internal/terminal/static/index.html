@@ -28,18 +28,12 @@
     <script>
       (function () {
         const statusEl = document.getElementById("status");
+        statusEl.textContent = "loading…";
 
-        // Read session token from cookie.
-        function getCookie(name) {
-          const m = document.cookie.match(
-            new RegExp("(?:^|;\\s*)" + name + "=([^;]*)")
-          );
-          return m ? decodeURIComponent(m[1]) : "";
-        }
+        try {
 
-        const token = getCookie("rl_session");
-        if (!token) {
-          statusEl.textContent = "No session — open from the app";
+        if (!window.Terminal) {
+          statusEl.textContent = "error: xterm.js not loaded from CDN";
           return;
         }
 
@@ -59,17 +53,52 @@
         term.open(document.getElementById("terminal"));
         fitAddon.fit();
 
-        // Build WebSocket URL from the current page origin.
-        const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
-        const wsUrl =
-          wsProto +
-          "//" +
-          location.host +
-          "/terminal/ws?token=" +
-          encodeURIComponent(token);
+        window.addEventListener("resize", function () {
+          fitAddon.fit();
+        });
 
+        // ── Android bridge mode ────────────────────────────────
+        // When loaded inside the Android WebView, the Kotlin app
+        // injects "AndroidBridge" which manages the WebSocket
+        // connection on the native side (bypassing WebView's SSL
+        // limitation for self-signed certs). Data is Base64-encoded.
+        if (window.AndroidBridge) {
+          statusEl.textContent = "connecting…";
+
+          window._onOpen = function () {
+            statusEl.textContent = "";
+            AndroidBridge.resize(term.cols, term.rows);
+          };
+
+          window._onData = function (b64) {
+            const raw = atob(b64);
+            const bytes = new Uint8Array(raw.length);
+            for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+            term.write(bytes);
+          };
+
+          window._onError = function (msg) {
+            statusEl.textContent = "error: " + msg;
+          };
+
+          term.onData(function (data) {
+            AndroidBridge.sendInput(btoa(data));
+          });
+
+          term.onResize(function (size) {
+            AndroidBridge.resize(size.cols, size.rows);
+          });
+
+          AndroidBridge.connect();
+          return;
+        }
+
+        // ── Desktop browser mode ───────────────────────────────
+        // Direct WebSocket — works when the browser trusts the cert
+        // (e.g. after clicking through the self-signed warning).
+        const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = wsProto + "//" + location.host + "/terminal/ws";
         let ws;
-        let reconnectTimer;
 
         function connect() {
           statusEl.textContent = "connecting…";
@@ -78,7 +107,6 @@
 
           ws.onopen = function () {
             statusEl.textContent = "";
-            // Send initial size.
             ws.send(
               JSON.stringify({
                 type: "resize",
@@ -98,7 +126,7 @@
 
           ws.onclose = function () {
             statusEl.textContent = "disconnected — reconnecting…";
-            reconnectTimer = setTimeout(connect, 2000);
+            setTimeout(connect, 2000);
           };
 
           ws.onerror = function () {
@@ -106,14 +134,12 @@
           };
         }
 
-        // Terminal input → WebSocket.
         term.onData(function (data) {
           if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(new TextEncoder().encode(data));
           }
         });
 
-        // Resize → WebSocket.
         term.onResize(function (size) {
           if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(
@@ -126,11 +152,11 @@
           }
         });
 
-        window.addEventListener("resize", function () {
-          fitAddon.fit();
-        });
-
         connect();
+
+        } catch (e) {
+          statusEl.textContent = "JS error: " + e.message;
+        }
       })();
     </script>
   </body>

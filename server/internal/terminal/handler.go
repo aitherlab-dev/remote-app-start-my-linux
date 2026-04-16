@@ -25,8 +25,15 @@ type resizeMsg struct {
 // WebSocket API does not support custom headers.
 func NewWSHandler(tokenStore *auth.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Authenticate via query parameter.
+		// Authenticate via query parameter or session cookie.
+		// The browser sends cookies automatically with the WS
+		// upgrade request, so the cookie path is the primary one.
 		token := r.URL.Query().Get("token")
+		if token == "" {
+			if c, err := r.Cookie("rl_session"); err == nil {
+				token = c.Value
+			}
+		}
 		if token == "" {
 			http.Error(w, "missing token", http.StatusUnauthorized)
 			return

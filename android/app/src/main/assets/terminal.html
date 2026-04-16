@@ -1,0 +1,85 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content"/>
+<style>
+html,body{margin:0;padding:0;overflow:hidden;background:#1e1e2e}
+body{display:flex;flex-direction:column}
+#terminal{flex:1;min-height:0;width:100%}
+</style>
+</head>
+<body>
+<div id="status" style="color:#fff;font:20px monospace;text-align:center;padding-top:40vh">loading…</div>
+<div id="terminal" style="display:none"></div>
+<script>
+var statusEl = document.getElementById("status");
+var termEl = document.getElementById("terminal");
+var term, fitAddon;
+
+function updateHeight() {
+  var h = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  document.body.style.height = h + "px";
+  if (fitAddon) fitAddon.fit();
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", updateHeight);
+  window.visualViewport.addEventListener("scroll", updateHeight);
+}
+window.addEventListener("resize", updateHeight);
+updateHeight();
+
+try {
+  if (window.AndroidBridge) {
+    statusEl.textContent = "injecting xterm…";
+    AndroidBridge.onPageReady();
+  } else {
+    statusEl.textContent = "no bridge";
+  }
+} catch(e) { statusEl.textContent = "error: " + e.message; }
+
+function sendStr(s) {
+  var bytes = new TextEncoder().encode(s);
+  var bin = "";
+  for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  AndroidBridge.sendInput(btoa(bin));
+}
+
+window._boot = function() {
+  try {
+    if (!window.Terminal) { statusEl.textContent = "xterm not available"; return; }
+    statusEl.style.display = "none";
+    termEl.style.display = "block";
+    updateHeight();
+
+    term = new Terminal({
+      cursorBlink:true, fontSize:14, fontFamily:"monospace",
+      theme:{background:"#1e1e2e",foreground:"#cdd6f4",cursor:"#f5e0dc",selectionBackground:"#585b70"},
+    });
+    fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(termEl);
+    fitAddon.fit();
+
+    window._onOpen = function(){AndroidBridge.resize(term.cols,term.rows)};
+    window._onData = function(b64){
+      var r=atob(b64),a=new Uint8Array(r.length);
+      for(var i=0;i<r.length;i++)a[i]=r.charCodeAt(i);
+      term.write(a);
+    };
+    window._onError = function(m){
+      termEl.style.display="none";
+      statusEl.style.display="block";statusEl.textContent="error: "+m;
+    };
+    term.onData(function(d){ sendStr(d); });
+    term.onResize(function(s){AndroidBridge.resize(s.cols,s.rows)});
+
+    AndroidBridge.connect();
+  } catch(e) {
+    statusEl.style.display = "block";
+    statusEl.textContent = "boot error: " + e.message;
+  }
+};
+</script>
+</body>
+</html>
