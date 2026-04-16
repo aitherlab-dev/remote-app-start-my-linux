@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>RemoteLauncher — Terminal</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { height: 100%; background: #1e1e2e; overflow: hidden; }
+      #terminal { height: 100%; width: 100%; }
+      .xterm { height: 100%; }
+      #status {
+        position: fixed; top: 8px; right: 12px;
+        font-family: monospace; font-size: 12px;
+        color: #6c7086; z-index: 10;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="status"></div>
+    <div id="terminal"></div>
+    <script>
+      (function () {
+        const statusEl = document.getElementById("status");
+
+        // Read session token from cookie.
+        function getCookie(name) {
+          const m = document.cookie.match(
+            new RegExp("(?:^|;\\s*)" + name + "=([^;]*)")
+          );
+          return m ? decodeURIComponent(m[1]) : "";
+        }
+
+        const token = getCookie("rl_session");
+        if (!token) {
+          statusEl.textContent = "No session — open from the app";
+          return;
+        }
+
+        const term = new window.Terminal({
+          cursorBlink: true,
+          fontSize: 14,
+          fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+          theme: {
+            background: "#1e1e2e",
+            foreground: "#cdd6f4",
+            cursor: "#f5e0dc",
+            selectionBackground: "#585b70",
+          },
+        });
+        const fitAddon = new window.FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        term.open(document.getElementById("terminal"));
+        fitAddon.fit();
+
+        // Build WebSocket URL from the current page origin.
+        const wsProto = location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl =
+          wsProto +
+          "//" +
+          location.host +
+          "/terminal/ws?token=" +
+          encodeURIComponent(token);
+
+        let ws;
+        let reconnectTimer;
+
+        function connect() {
+          statusEl.textContent = "connecting…";
+          ws = new WebSocket(wsUrl);
+          ws.binaryType = "arraybuffer";
+
+          ws.onopen = function () {
+            statusEl.textContent = "";
+            // Send initial size.
+            ws.send(
+              JSON.stringify({
+                type: "resize",
+                cols: term.cols,
+                rows: term.rows,
+              })
+            );
+          };
+
+          ws.onmessage = function (ev) {
+            if (ev.data instanceof ArrayBuffer) {
+              term.write(new Uint8Array(ev.data));
+            } else {
+              term.write(ev.data);
+            }
+          };
+
+          ws.onclose = function () {
+            statusEl.textContent = "disconnected — reconnecting…";
+            reconnectTimer = setTimeout(connect, 2000);
+          };
+
+          ws.onerror = function () {
+            ws.close();
+          };
+        }
+
+        // Terminal input → WebSocket.
+        term.onData(function (data) {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(new TextEncoder().encode(data));
+          }
+        });
+
+        // Resize → WebSocket.
+        term.onResize(function (size) {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(
+              JSON.stringify({
+                type: "resize",
+                cols: size.cols,
+                rows: size.rows,
+              })
+            );
+          }
+        });
+
+        window.addEventListener("resize", function () {
+          fitAddon.fit();
+        });
+
+        connect();
+      })();
+    </script>
+  </body>
+</html>

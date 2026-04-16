@@ -31,6 +31,11 @@ import (
 //go:embed static
 var staticFS embed.FS
 
+// StaticFS returns the embedded static filesystem so other packages
+// (e.g. httpapi) can serve the same SPA under a different prefix
+// without duplicating the embed directive.
+func StaticFS() embed.FS { return staticFS }
+
 // Deps collects the collaborators the admin UI needs. None of them
 // are owned by the web package — main.go wires the same catalog /
 // finder / store instances into both the HTTPS API and the admin UI

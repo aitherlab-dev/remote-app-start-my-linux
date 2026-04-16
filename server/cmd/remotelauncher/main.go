@@ -12,7 +12,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/sasha/remotelauncher/internal/admin"
 	"github.com/sasha/remotelauncher/internal/auth"
+	"github.com/sasha/remotelauncher/internal/terminal"
 	"github.com/sasha/remotelauncher/internal/catalog"
 	"github.com/sasha/remotelauncher/internal/config"
 	"github.com/sasha/remotelauncher/internal/httpapi"
@@ -143,7 +145,7 @@ func run(args []string) error {
 
 	pairLimiter := auth.NewRateLimiter(cfg.Auth.RateLimitPerIP, cfg.Auth.RateLimitGlobal, cfg.Auth.RateLimitWindow)
 
-	handler := httpapi.NewRouter(httpapi.RouterDeps{
+	apiHandler := httpapi.NewRouter(httpapi.RouterDeps{
 		Version:         Version,
 		StartedAt:       startedAt,
 		Catalog:         cat,
@@ -160,9 +162,32 @@ func run(args []string) error {
 		RateLimiter:     pairLimiter,
 	})
 
+	adminHandler := admin.NewHandler(admin.Deps{
+		TokenStore:      tokenStore,
+		Catalog:         cat,
+		Finder:          finder,
+		Visibility:      visibilityStore,
+		Shortcuts:       shortcutStore,
+		DefaultTerminal: cfg.Launcher.DefaultTerminal,
+	})
+
+	// Combine the REST API and the admin UI into a single handler.
+	// Admin routes (/admin/*) are dispatched to the admin handler;
+	// everything else goes to the API handler which has its own
+	// JSON-404 wrapper.
+	// Terminal page + WebSocket handler.
+	termPage := auth.RequireTokenOrCookie(tokenStore, "rl_session", "/", terminal.NewPageHandler())
+	termWS := terminal.NewWSHandler(tokenStore)
+
+	topMux := http.NewServeMux()
+	topMux.Handle("/admin/", adminHandler)
+	topMux.Handle("GET /terminal/", termPage)
+	topMux.Handle("GET /terminal/ws", termWS)
+	topMux.Handle("/", apiHandler)
+
 	srv := &http.Server{
 		Addr:              cfg.Server.ListenAddr,
-		Handler:           handler,
+		Handler:           topMux,
 		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 		ReadTimeout:       cfg.Server.ReadTimeout,
 		WriteTimeout:      cfg.Server.WriteTimeout,
