@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -63,6 +64,8 @@ fun AppsScreen(
     authToken: String,
     onUnauthorized: () -> Unit,
     onDisconnect: () -> Unit,
+    onAdmin: () -> Unit = {},
+    onTerminal: () -> Unit = {},
 ) {
     val uiState by viewModel.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -90,6 +93,18 @@ fun AppsScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.apps_title)) },
                 actions = {
+                    IconButton(onClick = onTerminal) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_terminal),
+                            contentDescription = stringResource(R.string.apps_terminal),
+                        )
+                    }
+                    IconButton(onClick = onAdmin) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = stringResource(R.string.apps_admin),
+                        )
+                    }
                     IconButton(onClick = { viewModel.refresh() }) {
                         Icon(
                             imageVector = Icons.Default.Refresh,

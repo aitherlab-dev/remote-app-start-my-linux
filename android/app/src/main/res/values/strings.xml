@@ -21,6 +21,8 @@
     <string name="pairing_sending">Подтверждаем…</string>
 
     <string name="apps_title">Приложения</string>
+    <string name="apps_terminal">Терминал</string>
+    <string name="apps_admin">Настройки</string>
     <string name="apps_refresh">Обновить</string>
     <string name="apps_disconnect">Отключиться</string>
     <string name="apps_empty">На сервере нет приложений</string>

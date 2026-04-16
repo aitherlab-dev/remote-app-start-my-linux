@@ -56,6 +56,58 @@ func TokenFromContext(ctx context.Context) (TokenInfo, bool) {
 	return info, ok
 }
 
+// RequireTokenOrCookie wraps next and enforces authentication via
+// either a Bearer header (checked first) or a named cookie (fallback).
+// When the Bearer header is present and valid the middleware also sets
+// the cookie in the response so that subsequent same-origin requests
+// from a browser (e.g. fetch() calls from an SPA loaded inside a
+// WebView) are authenticated automatically.
+//
+// The cookie is scoped to cookiePath, marked Secure, HttpOnly, and
+// SameSite=Strict. This makes it safe to use on the TLS-only public
+// port where the admin UI is served.
+func RequireTokenOrCookie(store *Store, cookieName, cookiePath string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var plaintext string
+
+		// 1. Try Bearer header.
+		if header := r.Header.Get("Authorization"); strings.HasPrefix(header, bearerPrefix) {
+			plaintext = strings.TrimPrefix(header, bearerPrefix)
+		}
+
+		// 2. Fallback: cookie.
+		if plaintext == "" {
+			if c, err := r.Cookie(cookieName); err == nil && c.Value != "" {
+				plaintext = c.Value
+			}
+		}
+
+		if plaintext == "" {
+			writeJSONError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token or session cookie")
+			return
+		}
+
+		info, ok := store.Validate(plaintext)
+		if !ok {
+			writeJSONError(w, http.StatusUnauthorized, "unauthorized", "invalid token")
+			return
+		}
+
+		// Set / refresh the cookie so browser-initiated requests work.
+		http.SetCookie(w, &http.Cookie{
+			Name:     cookieName,
+			Value:    plaintext,
+			Path:     cookiePath,
+			Secure:   true,
+			HttpOnly: true,
+			SameSite: http.SameSiteStrictMode,
+		})
+
+		ctx := context.WithValue(r.Context(), tokenContextKey, info)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // writeJSONError writes a JSON error body directly without importing
 // the httpapi package. The fmt.Sprintf formatting is safe because
 // code and message are always hard-coded literals in this file — no

@@ -13,7 +13,9 @@ import com.remotelauncher.data.AppsRepository
 import com.remotelauncher.data.SettingsRepository
 import com.remotelauncher.data.TokenStore
 import com.remotelauncher.net.RemoteLauncherApi
+import com.remotelauncher.ui.admin.AdminScreen
 import com.remotelauncher.ui.apps.AppsScreen
+import com.remotelauncher.ui.terminal.TerminalScreen
 import com.remotelauncher.ui.apps.AppsViewModel
 import com.remotelauncher.ui.connect.ConnectScreen
 import com.remotelauncher.ui.connect.ConnectViewModel
@@ -24,12 +26,20 @@ object Routes {
     const val CONNECT = "connect"
     const val PAIRING = "pairing/{serverUrl}"
     const val APPS = "apps/{serverUrl}"
+    const val ADMIN = "admin/{serverUrl}"
+    const val TERMINAL = "terminal/{serverUrl}"
 
     fun pairing(serverUrl: String): String =
         "pairing/" + Uri.encode(serverUrl)
 
     fun apps(serverUrl: String): String =
         "apps/" + Uri.encode(serverUrl)
+
+    fun admin(serverUrl: String): String =
+        "admin/" + Uri.encode(serverUrl)
+
+    fun terminal(serverUrl: String): String =
+        "terminal/" + Uri.encode(serverUrl)
 }
 
 @Composable
@@ -117,6 +127,38 @@ fun AppNavHost(
                         popUpTo(Routes.CONNECT) { inclusive = true }
                     }
                 },
+                onAdmin = {
+                    navController.navigate(Routes.admin(serverUrl))
+                },
+                onTerminal = {
+                    navController.navigate(Routes.terminal(serverUrl))
+                },
+            )
+        }
+        composable(
+            route = Routes.ADMIN,
+            arguments = listOf(navArgument("serverUrl") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val encoded = backStackEntry.arguments?.getString("serverUrl").orEmpty()
+            val serverUrl = Uri.decode(encoded)
+            val authToken = tokenStore.getToken(serverUrl).orEmpty()
+            AdminScreen(
+                serverUrl = serverUrl,
+                authToken = authToken,
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = Routes.TERMINAL,
+            arguments = listOf(navArgument("serverUrl") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val encoded = backStackEntry.arguments?.getString("serverUrl").orEmpty()
+            val serverUrl = Uri.decode(encoded)
+            val authToken = tokenStore.getToken(serverUrl).orEmpty()
+            TerminalScreen(
+                serverUrl = serverUrl,
+                authToken = authToken,
+                onBack = { navController.popBackStack() },
             )
         }
     }
