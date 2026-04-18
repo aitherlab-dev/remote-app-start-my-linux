@@ -219,6 +219,8 @@ func run(args []string) error {
 				Visibility:      visibilityStore,
 				Shortcuts:       shortcutStore,
 				DefaultTerminal: cfg.Launcher.DefaultTerminal,
+				PINSession:      pinSession,
+				PINTTL:          cfg.Auth.PINTTL,
 			}),
 			ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
 			ReadTimeout:       cfg.Server.ReadTimeout,

@@ -18,9 +18,12 @@ package web
 
 import (
 	"embed"
+	"encoding/json"
 	"io/fs"
 	"net/http"
+	"time"
 
+	"github.com/sasha/remotelauncher/internal/auth"
 	"github.com/sasha/remotelauncher/internal/catalog"
 	"github.com/sasha/remotelauncher/internal/httpapi"
 	"github.com/sasha/remotelauncher/internal/icons"
@@ -47,6 +50,8 @@ type Deps struct {
 	Visibility      *visibility.Store
 	Shortcuts       *shortcuts.Store
 	DefaultTerminal string
+	PINSession      *auth.PINSession // optional, nil = no PIN endpoints
+	PINTTL          time.Duration
 }
 
 // NewHandler builds the top-level http.Handler for the admin UI. It
@@ -74,5 +79,46 @@ func NewHandler(d Deps) http.Handler {
 	mux.Handle("GET /api/shortcuts", NewShortcutsHandler(d.Shortcuts, d.DefaultTerminal))
 	mux.Handle("PUT /api/shortcuts", NewUpdateShortcutsHandler(d.Shortcuts))
 
+	if d.PINSession != nil {
+		mux.Handle("GET /api/pin", newPINGetHandler(d.PINSession))
+		mux.Handle("POST /api/pin", newPINPostHandler(d.PINSession, d.PINTTL))
+	}
+
 	return mux
+}
+
+type pinResponse struct {
+	PIN       string    `json:"pin"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Consumed  bool      `json:"consumed"`
+	Expired   bool      `json:"expired"`
+}
+
+func pinJSON(ps *auth.PINSession) pinResponse {
+	pin, expiresAt, consumed := ps.Status()
+	expired := !expiresAt.IsZero() && time.Now().After(expiresAt)
+	return pinResponse{
+		PIN:       pin,
+		ExpiresAt: expiresAt,
+		Consumed:  consumed,
+		Expired:   expired,
+	}
+}
+
+func newPINGetHandler(ps *auth.PINSession) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(pinJSON(ps))
+	})
+}
+
+func newPINPostHandler(ps *auth.PINSession, ttl time.Duration) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := ps.Regenerate(ttl); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(pinJSON(ps))
+	})
 }

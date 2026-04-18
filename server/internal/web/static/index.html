@@ -103,6 +103,26 @@
         </div>
       </header>
 
+      <!-- PIN CARD -->
+      <div class="card card-compact bg-base-200/60 shadow mb-5">
+        <div class="card-body flex-row items-center justify-between gap-4 flex-wrap">
+          <div class="flex items-center gap-4">
+            <span class="text-sm opacity-70">PIN для подключения:</span>
+            <span class="font-mono text-2xl font-bold tracking-widest" x-text="pin.code || '—'"></span>
+            <template x-if="pin.consumed">
+              <span class="badge badge-error">использован</span>
+            </template>
+            <template x-if="!pin.consumed && pin.expired">
+              <span class="badge badge-warning">истёк</span>
+            </template>
+            <template x-if="!pin.consumed && !pin.expired && pin.code">
+              <span class="badge badge-success" x-text="'ещё ' + pin.remaining"></span>
+            </template>
+          </div>
+          <button class="btn btn-primary btn-sm" x-on:click="newPin()">Новый PIN</button>
+        </div>
+      </div>
+
       <div role="tablist" class="tabs tabs-boxed mb-5 self-start">
         <button
           role="tab"
@@ -325,6 +345,8 @@
           query: "",
           filter: "all",
           tab: "apps",
+          pin: { code: "", consumed: false, expired: false, remaining: "" },
+          pinTimer: null,
           toast: { visible: false, text: "", kind: "success" },
           toastTimer: null,
           formOpen: false,
@@ -364,8 +386,48 @@
             return (app.name || "?").trim().charAt(0).toUpperCase();
           },
 
+          updatePinRemaining(expiresAt) {
+            if (this.pinTimer) clearInterval(this.pinTimer);
+            const update = () => {
+              const left = Math.max(0, Math.floor((new Date(expiresAt) - Date.now()) / 1000));
+              if (left <= 0) { this.pin.expired = true; this.pin.remaining = ""; clearInterval(this.pinTimer); return; }
+              const m = Math.floor(left / 60), s = left % 60;
+              this.pin.remaining = m + ":" + String(s).padStart(2, "0");
+            };
+            update();
+            this.pinTimer = setInterval(update, 1000);
+          },
+
+          async loadPin() {
+            try {
+              const res = await fetch("api/pin");
+              if (!res.ok) return;
+              const d = await res.json();
+              this.pin.code = d.pin;
+              this.pin.consumed = d.consumed;
+              this.pin.expired = d.expired;
+              if (!d.consumed && !d.expired) this.updatePinRemaining(d.expires_at);
+            } catch (_) {}
+          },
+
+          async newPin() {
+            try {
+              const res = await fetch("api/pin", { method: "POST" });
+              if (!res.ok) throw new Error("status " + res.status);
+              const d = await res.json();
+              this.pin.code = d.pin;
+              this.pin.consumed = d.consumed;
+              this.pin.expired = d.expired;
+              this.updatePinRemaining(d.expires_at);
+              this.showToast("Новый PIN: " + d.pin, "success");
+            } catch (e) {
+              this.showToast("Ошибка: " + e.message, "error");
+            }
+          },
+
           async load() {
             this.loading = true;
+            this.loadPin();
             try {
               const [appsRes, scRes] = await Promise.all([
                 fetch("api/apps"),

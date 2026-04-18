@@ -82,6 +82,34 @@ func (s *PINSession) Consume() bool {
 	return true
 }
 
+// Status returns the current PIN, its expiry time, and whether it has
+// been consumed. Callers can derive "expired" from expiresAt themselves.
+func (s *PINSession) Status() (pin string, expiresAt time.Time, consumed bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pin, s.expiresAt, s.consumed
+}
+
+// Regenerate creates a fresh PIN and resets the consumed flag and
+// expiry. It is used by the local admin UI to issue a new PIN without
+// restarting the server.
+func (s *PINSession) Regenerate(ttl time.Duration) error {
+	pin, err := GeneratePIN()
+	if err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pin = pin
+	s.consumed = false
+	if ttl > 0 {
+		s.expiresAt = time.Now().Add(ttl)
+	} else {
+		s.expiresAt = time.Time{}
+	}
+	return nil
+}
+
 // String renders the session in a form suitable for logging. The PIN
 // is plainly visible: the design intent is that the server operator
 // (who sees the log) must see the PIN to type it into the phone.
